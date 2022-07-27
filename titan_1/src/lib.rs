@@ -22,14 +22,20 @@ fn master() {
 
     let storage_serial = storage.serialize(&registry);
     println!("{}", storage_serial);
+
+    let new_storage = Storage::deserialize(&storage_serial, &registry);
+    let new_storage_serial = new_storage.serialize(&registry);
+    println!("{}", new_storage_serial);
 }
 
 mod serialization {
-    use crate::{registry::Registry, storage::Storage};
+    use serde_json::Value;
+
+    use crate::{registry::Registry, storage::Storage, BundleKind};
 
     pub trait Serializable<T> {
         fn serialize(&self, registry: &Registry) -> String;
-        fn deserialize(serial: &str) -> T;
+        fn deserialize(serial: &str, registry: &Registry) -> T;
     }
 
     impl Serializable<Storage> for Storage {
@@ -41,15 +47,36 @@ mod serialization {
 
                 // Serialize each entity in archetype
                 for i in 0..archetype.get_entity_count() {
-                    let entity_value = (archetype_entity_serialize_fn)(i, &archetype);
+                    let entity_value = (archetype_entity_serialize_fn)(i, &archetype, bundle_kind);
                     entity_values.push(entity_value);
                 }
             }
             let entities_string = serde_json::to_string(&entity_values).unwrap();
             entities_string
         }
-        fn deserialize(serial: &str) -> Storage {
-            Storage::new()
+        fn deserialize(serial: &str, registry: &Registry) -> Storage {
+            let entity_values = serde_json::from_str::<Value>(serial)
+                .expect("Could not deserialize entities from JSON");
+            let entity_values = entity_values
+                .as_array()
+                .expect("Could not parse JSON value as array");
+            let mut storage = Storage::new();
+            for entity_value in entity_values {
+                let entity_object = entity_value
+                    .as_object()
+                    .expect("Could not parse JSON value as object");
+                let bundle_kind_string = entity_object
+                    .get(&"bundle_kind".to_string())
+                    .expect("Could not get bundle_kind on JSON value")
+                    .as_str()
+                    .expect("Could not parse JSON bundle_kind as str")
+                    .to_string();
+                let bundle_kind = BundleKind(bundle_kind_string);
+                let archetype_entity_deserialize_fn =
+                    registry.bundle_kind_to_archetype_entity_deserialize_fn(bundle_kind);
+                (archetype_entity_deserialize_fn)(entity_value, &mut storage, registry);
+            }
+            storage
         }
     }
 } /* serialization */
@@ -113,6 +140,17 @@ mod storage {
             }
         }
         pub fn spawn<T: Bundle + 'static>(&mut self, registry: &Registry, bundle: T) {
+            self.spawn_with_entity_id(registry, self.current_entity_id, bundle);
+
+            // Increment entity_id for next spawn
+            self.current_entity_id = self.current_entity_id + 1;
+        }
+        pub fn spawn_with_entity_id<T: Bundle + 'static>(
+            &mut self,
+            registry: &Registry,
+            entity_id: EntityId,
+            bundle: T,
+        ) {
             let bundle_type_id = TypeId::of::<T>();
             let bundle_kind = registry.bundle_type_id_to_kind(bundle_type_id);
 
@@ -131,10 +169,7 @@ mod storage {
             };
 
             // Push bundle into archetype
-            bundle.push_into_archetype(self.current_entity_id, archetype);
-
-            // Increment entity_id for next spawn
-            self.current_entity_id = self.current_entity_id + 1;
+            bundle.push_into_archetype(entity_id, archetype);
         }
     }
     pub struct Archetype {
@@ -186,6 +221,7 @@ mod storage {
 
 mod registry {
     use crate::storage::Archetype;
+    use crate::storage::Storage;
     use crate::BundleKind;
     use crate::ComponentKind;
     use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -198,7 +234,8 @@ mod registry {
 
     type SerializeFn = Box<dyn Fn(&dyn Any) -> Value>;
     type DeserializeFn = Box<dyn Fn(&str) -> Box<dyn Any>>;
-    type ArchetypeEntitySerializeFn = Box<dyn Fn(usize, &Archetype) -> Value>;
+    type ArchetypeEntitySerializeFn = Box<dyn Fn(usize, &Archetype, &BundleKind) -> Value>;
+    type ArchetypeEntityDeserializeFn = Box<dyn Fn(&Value, &mut Storage, &Registry)>;
 
     pub struct Registry {
         type_ids: HashSet<TypeId>,
@@ -211,6 +248,8 @@ mod registry {
         bundle_kind_to_type_id: HashMap<BundleKind, TypeId>,
         bundle_kind_to_archetype_entity_serialize_fn:
             HashMap<BundleKind, ArchetypeEntitySerializeFn>,
+        bundle_kind_to_archetype_entity_deserialize_fn:
+            HashMap<BundleKind, ArchetypeEntityDeserializeFn>,
     }
     impl Registry {
         pub fn new() -> Self {
@@ -224,6 +263,7 @@ mod registry {
                 bundle_type_id_to_kind: HashMap::new(),
                 bundle_kind_to_type_id: HashMap::new(),
                 bundle_kind_to_archetype_entity_serialize_fn: HashMap::new(),
+                bundle_kind_to_archetype_entity_deserialize_fn: HashMap::new(),
             }
         }
         pub fn register_component<T: RegisterComponent>(&mut self, name: &str) {
@@ -252,9 +292,14 @@ mod registry {
                 .get(&kind)
                 .expect("Could not get serialize_fn given kind")
         }
-        //pub(crate) fn kind_to_deserializer(&self, kind: ComponentKind) -> &DeserializeFn {
-        //self.kind_to_deserializer.get(&kind).expect("Could not get deserialize_fn given kind")
-        //}
+        pub(crate) fn bundle_kind_to_archetype_entity_deserialize_fn(
+            &self,
+            kind: BundleKind,
+        ) -> &ArchetypeEntityDeserializeFn {
+            self.bundle_kind_to_archetype_entity_deserialize_fn
+                .get(&kind)
+                .expect("Could not get deserialize_fn given kind")
+        }
     }
 
     pub trait RegisterComponent {
@@ -324,36 +369,62 @@ mod registry {
                 .insert(bundle_kind.clone(), bundle_type_id);
 
             // Register SerializeFn
-            let archetype_entity_serialize_fn = |entity_index: usize, archetype: &Archetype| {
-                let entity_id = archetype.get_entity_id_at_index_unchecked(entity_index);
+            let archetype_entity_serialize_fn =
+                |entity_index: usize, archetype: &Archetype, bundle_kind: &BundleKind| {
+                    let entity_id = archetype.get_entity_id_at_index_unchecked(entity_index);
 
-                // Serialize each component
-                let component_a = archetype.get_component_at_index_unchecked::<A>(entity_index);
-                let component_a_value = serde_json::to_value(component_a).unwrap();
-                let component_b = archetype.get_component_at_index_unchecked::<B>(entity_index);
-                let component_b_value = serde_json::to_value(component_b).unwrap();
+                    // Serialize each component
+                    let component_a = archetype.get_component_at_index_unchecked::<A>(entity_index);
+                    let component_a_value = serde_json::to_value(component_a).unwrap();
+                    let component_b = archetype.get_component_at_index_unchecked::<B>(entity_index);
+                    let component_b_value = serde_json::to_value(component_b).unwrap();
 
-                // Build entity object
-                let mut entity_object = Map::new();
-                entity_object.insert("entity_id".to_string(), Value::from(entity_id));
-                entity_object.insert("A".to_string(), component_a_value);
-                entity_object.insert("B".to_string(), component_b_value);
+                    // Build entity object
+                    let mut entity_object = Map::new();
+                    entity_object.insert(
+                        "bundle_kind".to_string(),
+                        Value::from(bundle_kind.0.clone()),
+                    );
+                    entity_object.insert("entity_id".to_string(), Value::from(entity_id));
+                    entity_object.insert("A".to_string(), component_a_value);
+                    entity_object.insert("B".to_string(), component_b_value);
 
-                Value::from(entity_object)
-            };
+                    Value::from(entity_object)
+                };
             registry
                 .bundle_kind_to_archetype_entity_serialize_fn
                 .insert(bundle_kind.clone(), Box::new(archetype_entity_serialize_fn));
 
-            //let kind_serialize_fn = |item: &dyn Any| {
-            //let item = item
-            //.downcast_ref::<T>()
-            //.expect("Could not downcast item to T");
-            //serde_json::to_value(item).expect("Could not serialize kind to value")
-            //};
-            //registry
-            //.kind_to_serializer
-            //.insert(kind.clone(), Box::new(kind_serialize_fn));
+            // Register DeserializeFn
+            let archetype_entity_deserialize_fn =
+                |entity_value: &Value, storage: &mut Storage, registry: &Registry| {
+                    let entity_object = entity_value
+                        .as_object()
+                        .expect("Could not parse JSON value as object");
+                    let entity_id = entity_object
+                        .get(&"entity_id".to_string())
+                        .expect("Could not get JSON entity_id")
+                        .as_u64()
+                        .expect("Could not parse JSON value as u64");
+                    let component_a_value = entity_object
+                        .get(&"A".to_string())
+                        .expect("Could not get JSON component A");
+                    let component_a = serde_json::from_value::<A>(component_a_value.clone())
+                        .expect("Could not parse JSON value as component A");
+                    let component_b_value = entity_object
+                        .get(&"B".to_string())
+                        .expect("Could not get JSON component B");
+                    let component_b = serde_json::from_value::<B>(component_b_value.clone())
+                        .expect("Could not parse JSON value as component B");
+                    let bundle = (component_a, component_b);
+                    storage.spawn_with_entity_id(registry, entity_id as usize, bundle);
+                };
+            registry
+                .bundle_kind_to_archetype_entity_deserialize_fn
+                .insert(
+                    bundle_kind.clone(),
+                    Box::new(archetype_entity_deserialize_fn),
+                );
         }
     }
 
