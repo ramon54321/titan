@@ -132,6 +132,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "titan_example"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "titan",
+]
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
