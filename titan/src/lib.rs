@@ -4,6 +4,7 @@ use serialization::Serializable;
 use storage::Storage;
 
 mod bundle;
+mod filter;
 mod registry;
 mod serialization;
 mod storage;
@@ -78,12 +79,14 @@ fn master() {
     registry.register_component::<Age>(&"Age");
     registry.register_component::<Name>(&"Name");
     registry.register_component::<Person>(&"Person");
-    registry.register_archetype::<(Name, Age)>(&"AgeName");
+    registry.register_archetype::<(Name, Age)>();
 
     let mut storage = Storage::new();
     storage.spawn(&registry, (Age(23), Name("Jeff".to_string())));
     storage.spawn(&registry, (Age(19), Name("Julia".to_string())));
     storage.spawn(&registry, (Name("Bob".to_string()), Age(29)));
+
+    //storage.
 
     let storage_serial = storage.serialize(&registry);
     println!("{}", storage_serial);
