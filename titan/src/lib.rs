@@ -1,4 +1,7 @@
+#![feature(generic_associated_types)]
+
 use bundle::Bundle;
+use filter::ArchetypeFetch;
 use registry::{RegisterArchetype, RegisterComponent, Registry};
 use serialization::Serializable;
 use storage::Storage;
@@ -65,11 +68,11 @@ impl Default for ECS {
 #[test]
 fn master() {
     use serde::{Deserialize, Serialize};
-    #[derive(Serialize, Deserialize)]
+    #[derive(Debug, Serialize, Deserialize)]
     struct Age(u8);
-    #[derive(Serialize, Deserialize)]
+    #[derive(Debug, Serialize, Deserialize)]
     struct Name(String);
-    #[derive(Serialize, Deserialize)]
+    #[derive(Debug, Serialize, Deserialize)]
     struct Person {
         height: u16,
         weight: u16,
@@ -86,7 +89,10 @@ fn master() {
     storage.spawn(&registry, (Age(19), Name("Julia".to_string())));
     storage.spawn(&registry, (Name("Bob".to_string()), Age(29)));
 
-    //storage.
+    let query = <(&Age, &Name)>::fetch(&mut storage);
+    for q in query {
+        println!("{:?}", q);
+    }
 
     let storage_serial = storage.serialize(&registry);
     println!("{}", storage_serial);

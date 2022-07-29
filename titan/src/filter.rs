@@ -5,20 +5,19 @@ use crate::{
     storage::{Archetype, Storage},
 };
 
-trait ArchetypeFetch<'a> {
-    type BundleItem;
-    fn fetch(storage: &'a mut Storage) -> Vec<(usize, Self::BundleItem)>;
+pub trait ArchetypeFetch {
+    type BundleItem<'a>;
+    fn fetch<'a>(storage: &'a mut Storage) -> Vec<(usize, Self::BundleItem<'a>)>;
 }
 
-impl<'a, A: ComponentFetch<'a> + 'static, B: ComponentFetch<'a> + 'static> ArchetypeFetch<'a>
-    for (A, B)
-{
-    type BundleItem = (A::ComponentItem, B::ComponentItem);
-    fn fetch(storage: &'a mut Storage) -> Vec<(usize, Self::BundleItem)> {
+impl<A: ComponentFetch + 'static, B: ComponentFetch + 'static> ArchetypeFetch for (A, B) {
+    type BundleItem<'a> = (A::ComponentItem<'a>, B::ComponentItem<'a>);
+    fn fetch<'a>(storage: &'a mut Storage) -> Vec<(usize, Self::BundleItem<'a>)> {
         // Get archetypes in some way
         //let component_type_id = TypeId::of::<T>();
         //let component_kind = registry.type_id_to_kind(component_type_id);
 
+        // Mock get archetypes
         let archetypes = [storage
             .archetype_by_bundle_kind
             .values_mut()
@@ -30,23 +29,12 @@ impl<'a, A: ComponentFetch<'a> + 'static, B: ComponentFetch<'a> + 'static> Arche
             let component_count = archetype.get_entity_count();
 
             for i in 0..component_count {
-                //let entity_id = archetype.get_entity_id_at_index_unchecked(i);
-
-                // For each type
-                //let component_a = archetype.get_component_at_index_unchecked::<A>(i);
-                //let component_b = archetype.get_component_at_index_unchecked::<B>(i);
-
-                //let component_a = <A as ComponentFetch>::fetch(archetype, i);
-                //let component_b = <B as ComponentFetch>::fetch(archetype, i);
-
+                let entity_id = archetype.get_entity_id_at_index_unchecked(i);
                 let bundle = (
                     <A as ComponentFetch>::fetch(archetype, i),
                     <B as ComponentFetch>::fetch(archetype, i),
                 );
-
-                //let bundle = (component_a, component_b);
-                //let wrapped_bundle = (entity_id, bundle);
-                let wrapped_bundle = (23, bundle);
+                let wrapped_bundle = (entity_id, bundle);
                 wrapped_bundles.push(wrapped_bundle);
             }
         }
@@ -54,15 +42,15 @@ impl<'a, A: ComponentFetch<'a> + 'static, B: ComponentFetch<'a> + 'static> Arche
     }
 }
 
-trait ComponentFetch<'a> {
-    type ComponentItem;
-    fn fetch(archetype: &'a mut Archetype, index: usize) -> Self::ComponentItem;
+pub trait ComponentFetch {
+    type ComponentItem<'a>;
+    fn fetch<'b>(archetype: &'b Archetype, index: usize) -> Self::ComponentItem<'b>;
 }
 
-impl<'a, T: 'static> ComponentFetch<'a> for &'a T {
-    type ComponentItem = &'a T;
-    fn fetch(archetype: &'a mut Archetype, index: usize) -> Self::ComponentItem {
-        archetype.get_component_at_index_unchecked::<T>(index)
+impl<T: 'static> ComponentFetch for &T {
+    type ComponentItem<'a> = &'a T;
+    fn fetch<'b>(archetype: &'b Archetype, index: usize) -> Self::ComponentItem<'b> {
+        &archetype.get_component_at_index_unchecked::<T>(index)
     }
 }
 
