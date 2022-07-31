@@ -1,85 +1,87 @@
-use std::any::TypeId;
+use std::{
+    any::TypeId,
+    marker::PhantomData,
+    sync::{RwLockReadGuard, RwLockWriteGuard},
+};
 
 use crate::{
     registry::Registry,
     storage::{Archetype, Storage},
 };
 
-pub trait ArchetypeFetch {
-    type BundleItem<'a>;
-    fn fetch<'a>(storage: &'a mut Storage) -> Vec<(usize, Self::BundleItem<'a>)>;
+pub trait Fetch {
+    type FetchItem<'a>;
+    fn fetch<'a>(storage: &'a Storage) -> Vec<Self::FetchItem<'a>>;
 }
 
-impl<A: ComponentFetch + 'static, B: ComponentFetch + 'static> ArchetypeFetch for (A, B) {
-    type BundleItem<'a> = (A::ComponentItem<'a>, B::ComponentItem<'a>);
-    fn fetch<'a>(storage: &'a mut Storage) -> Vec<(usize, Self::BundleItem<'a>)> {
+impl<A: TypeFetch + 'static, B: TypeFetch + 'static> Fetch for (A, B) {
+    type FetchItem<'a> = (A::FetchItem<'a>, B::FetchItem<'a>);
+    fn fetch<'a>(storage: &'a Storage) -> Vec<Self::FetchItem<'a>> {
         // Get archetypes in some way
         //let component_type_id = TypeId::of::<T>();
         //let component_kind = registry.type_id_to_kind(component_type_id);
 
         // Mock get archetypes
-        let archetypes = [storage
-            .archetype_by_bundle_kind
-            .values_mut()
-            .last()
-            .unwrap()];
+        let archetypes = [storage.archetype_by_bundle_kind.values().last().unwrap()];
 
-        let mut wrapped_bundles = Vec::new();
+        let mut lock_bundles = Vec::new();
         for archetype in archetypes {
-            let component_count = archetype.get_entity_count();
-
-            for i in 0..component_count {
-                let entity_id = archetype.get_entity_id_at_index_unchecked(i);
-                let bundle = (
-                    <A as ComponentFetch>::fetch(archetype, i),
-                    <B as ComponentFetch>::fetch(archetype, i),
-                );
-                let wrapped_bundle = (entity_id, bundle);
-                wrapped_bundles.push(wrapped_bundle);
-            }
+            let lock_bundle = (A::fetch(&archetype), B::fetch(&archetype));
+            lock_bundles.push(lock_bundle);
         }
-        wrapped_bundles
+        //let lock_bundle = (A::fetch(&archetype), B::fetch(&archetype));
+        //lock_bundles.push(lock_bundle);
+
+        lock_bundles
     }
 }
 
-pub trait ComponentFetch {
-    type ComponentItem<'a>;
-    fn fetch<'b>(archetype: &'b Archetype, index: usize) -> Self::ComponentItem<'b>;
+struct FetchIter<'a, T> {
+    lock_bundle: T,
+    archetype: &'a mut Archetype,
+}
+//impl FetchIter<'a, T> {
+//fn new(archetype: &'a mut Archetype) -> Self {
+//FetchIter {
+//lock_bundle: (A::fetch(&archetype), B::fetch(&archetype)),
+//archetype: archetype,
+//};
+//}
+//}
+
+pub trait TypeFetch {
+    type FetchItem<'a>: SomeLock<'a>;
+    fn fetch<'b>(archetype: &'b Archetype) -> Self::FetchItem<'b>;
 }
 
-impl<T: 'static> ComponentFetch for &T {
-    type ComponentItem<'a> = &'a T;
-    fn fetch<'b>(archetype: &'b Archetype, index: usize) -> Self::ComponentItem<'b> {
-        &archetype.get_component_at_index_unchecked::<T>(index)
+impl<T: 'static> TypeFetch for &T {
+    type FetchItem<'a> = RwLockReadGuard<'a, Vec<T>>;
+    fn fetch<'b>(archetype: &'b Archetype) -> Self::FetchItem<'b> {
+        archetype.get_component_vec_lock::<T>()
+    }
+}
+impl<T: 'static> TypeFetch for &mut T {
+    type FetchItem<'a> = RwLockWriteGuard<'a, Vec<T>>;
+    fn fetch<'b>(archetype: &'b Archetype) -> Self::FetchItem<'b> {
+        archetype.get_component_vec_lock_mut::<T>()
     }
 }
 
-//trait Fetch<'a> {
-//type Item;
-//fn fetch(registry: &Registry, storage: &mut Storage) -> Vec<Self::Item>;
-//}
+pub trait SomeLock<'a> {
+    type IterType;
+    fn iter(&'a self) -> Self::IterType;
+}
 
-//impl<'a, T: 'static> Fetch<'a> for &'a T {
-//type Item = &'a T;
-//fn fetch(registry: &Registry, storage: &mut Storage) -> Vec<Self::Item> {
-//// Get archetypes in some way
-//let component_type_id = TypeId::of::<T>();
-//let component_kind = registry.type_id_to_kind(component_type_id);
-//let archetypes = [storage
-//.archetype_by_bundle_kind
-//.values_mut()
-//.last()
-//.unwrap()];
+impl<'a, T> SomeLock<'a> for RwLockReadGuard<'a, Vec<T>> {
+    type IterType = std::slice::Iter<'a, T>;
+    fn iter(&'a self) -> Self::IterType {
+        <[T]>::iter(self)
+    }
+}
 
-//let mut components = Vec::new();
-//for archetype in archetypes {
-//let component_count = archetype.get_entity_count();
-//for i in 0..component_count {
-//let component = archetype.get_component_at_index_unchecked::<T>(i);
-//components.push(component);
-//}
-//}
-
-//components
-//}
-//}
+impl<'a, T> SomeLock<'a> for RwLockWriteGuard<'a, Vec<T>> {
+    type IterType = std::slice::Iter<'a, T>;
+    fn iter(&'a self) -> Self::IterType {
+        <[T]>::iter(self)
+    }
+}

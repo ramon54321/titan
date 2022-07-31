@@ -3,8 +3,12 @@ use crate::{
     registry::Registry,
     EntityId,
 };
-use std::any::{Any, TypeId};
-use std::collections::HashMap;
+use std::sync::RwLock;
+use std::{
+    any::{Any, TypeId},
+    sync::RwLockReadGuard,
+};
+use std::{collections::HashMap, sync::RwLockWriteGuard};
 
 pub struct Storage {
     current_entity_id: EntityId,
@@ -57,13 +61,13 @@ impl Storage {
 }
 pub struct Archetype {
     entity_ids: Vec<EntityId>,
-    component_vecs_by_type_id: HashMap<TypeId, Box<dyn Any>>,
+    component_vec_locks_by_type_id: HashMap<TypeId, Box<dyn Any>>,
 }
 impl Archetype {
     fn new() -> Self {
         Archetype {
             entity_ids: Vec::new(),
-            component_vecs_by_type_id: HashMap::new(),
+            component_vec_locks_by_type_id: HashMap::new(),
         }
     }
     pub fn get_entity_count(&self) -> usize {
@@ -71,17 +75,20 @@ impl Archetype {
     }
     pub(crate) fn push_component<T: 'static>(&mut self, component: T) {
         let type_id = TypeId::of::<T>();
-        if !self.component_vecs_by_type_id.contains_key(&type_id) {
-            self.component_vecs_by_type_id
-                .insert(type_id.clone(), Box::new(Vec::<T>::new()));
+        if !self.component_vec_locks_by_type_id.contains_key(&type_id) {
+            self.component_vec_locks_by_type_id
+                .insert(type_id.clone(), Box::new(RwLock::new(Vec::<T>::new())));
         }
         let component_vec = self
-            .component_vecs_by_type_id
+            .component_vec_locks_by_type_id
             .get_mut(&type_id)
             .unwrap()
-            .downcast_mut::<Vec<T>>()
+            .downcast_mut::<RwLock<Vec<T>>>()
             .expect("Could not downcast component vec to Vec<T>");
-        component_vec.push(component);
+        component_vec
+            .get_mut()
+            .expect("Could not get write access to component vec in order to push new component")
+            .push(component);
     }
     pub(crate) fn push_entity_id(&mut self, entity_id: EntityId) {
         self.entity_ids.push(entity_id);
@@ -89,14 +96,39 @@ impl Archetype {
     pub(crate) fn get_entity_id_at_index_unchecked(&self, index: usize) -> EntityId {
         self.entity_ids[index]
     }
-    pub(crate) fn get_component_at_index_unchecked<T: 'static>(&self, index: usize) -> &T {
+    pub(crate) fn get_component_vec_lock<T: 'static>(&self) -> RwLockReadGuard<Vec<T>> {
         let type_id = TypeId::of::<T>();
-        let component_vec = self
-            .component_vecs_by_type_id
+        self.component_vec_locks_by_type_id
             .get(&type_id)
-            .unwrap()
-            .downcast_ref::<Vec<T>>()
-            .expect("Could not downcast component vec to Vec<T>");
-        &component_vec[index]
+            .expect("Could not find component vec for given type_id in archetype")
+            .downcast_ref::<RwLock<Vec<T>>>()
+            .expect("Could not downcast to lock of component vec")
+            .try_read()
+            .expect("Could not get from component vec lock")
+    }
+    pub(crate) fn get_component_vec_lock_mut<T: 'static>(&self) -> RwLockWriteGuard<Vec<T>> {
+        let type_id = TypeId::of::<T>();
+        self.component_vec_locks_by_type_id
+            .get(&type_id)
+            .expect("Could not find component vec for given type_id in archetype")
+            .downcast_ref::<RwLock<Vec<T>>>()
+            .expect("Could not downcast to lock of component vec")
+            .try_write()
+            .expect("Could not get from component vec lock")
+    }
+    pub(crate) fn get_component_at_index_unchecked_mut<T: 'static>(
+        &mut self,
+        index: usize,
+    ) -> &mut T {
+        let type_id = TypeId::of::<T>();
+        let raw_component_vec = self
+            .component_vec_locks_by_type_id
+            .get_mut(&type_id)
+            .expect("Could not find component vec for given type_id in archetype")
+            .downcast_mut::<RwLock<Vec<T>>>()
+            .expect("Could not downcast_mut to lock of component vec")
+            .get_mut()
+            .expect("Could not get mut from component vec lock");
+        &mut raw_component_vec[index]
     }
 }

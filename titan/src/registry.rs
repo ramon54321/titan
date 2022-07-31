@@ -168,11 +168,17 @@ macro_rules! register_archetype_impl {
 
                             // Serialize each component
                             $(
-                                let paste!{[<component_ $name>]} =
-                                    archetype.get_component_at_index_unchecked::<$name>(entity_index);
+                                let paste!{[<component_ $name>]} = &archetype.get_component_vec_lock::<$name>()[entity_index];
                                 let paste!{[<component_ $name _value>]} =
                                     serde_json::to_value(paste!{[<component_ $name>]}).unwrap();
                              )*
+
+                            //$(
+                                ////let paste!{[<component_ $name>]} =
+                                    ////archetype.get_component_at_index_unchecked_mut::<$name>(entity_index);
+                                //let paste!{[<component_ $name _value>]} =
+                                    //serde_json::to_value(paste!{[<component_ $name>]}).unwrap();
+                             //)*
 
                             // Build entity object
                             let mut entity_object = Map::new();

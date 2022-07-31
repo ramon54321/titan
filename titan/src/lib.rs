@@ -1,7 +1,7 @@
 #![feature(generic_associated_types)]
 
 use bundle::Bundle;
-use filter::ArchetypeFetch;
+use filter::Fetch;
 use registry::{RegisterArchetype, RegisterComponent, Registry};
 use serialization::Serializable;
 use storage::Storage;
@@ -89,7 +89,7 @@ fn master() {
     storage.spawn(&registry, (Age(19), Name("Julia".to_string())));
     storage.spawn(&registry, (Name("Bob".to_string()), Age(29)));
 
-    let query = <(&Age, &Name)>::fetch(&mut storage);
+    let query = <(&mut Age, &Name)>::fetch(&mut storage);
     for q in query {
         println!("{:?}", q);
     }
