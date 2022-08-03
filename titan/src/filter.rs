@@ -52,29 +52,42 @@ trait Query<'fetch> {
 
 impl<'fetch, A, B> Query<'fetch> for (A, B)
 where
-    A: 'static + Debug + Fetch<'fetch>,
-    B: 'static + Debug + Fetch<'fetch>,
+    A: 'static + Debug + Parameter,
+    B: 'static + Debug + Parameter,
 {
     type ResultType = Result<'fetch, A, B>;
     fn query(storage: &Storage) -> Self::ResultType {
         let archetype = storage.archetype_by_bundle_kind.values().last().unwrap();
-        let component_vec_lock_a = <A>::fetch(archetype);
-        let component_vec_lock_b = <B>::fetch(archetype);
-        todo!()
-        //Result {
-        //a: component_vec_lock_a,
-        //b: component_vec_lock_b,
-        //phantom: PhantomData::default(),
-        //}
+        let component_vec_lock_a = <A::ParameterFetch>::fetch(archetype);
+        let component_vec_lock_b = <B::ParameterFetch>::fetch(archetype);
+        //todo!()
+        Result {
+            a: component_vec_lock_a,
+            b: component_vec_lock_b,
+        }
     }
 }
 
-trait Fetch<'fetch> {
+struct ParameterFetchRead<T> {
+    phantom: PhantomData<T>,
+}
+
+trait Parameter {
+    type ParameterFetch: for<'borrow> ParameterFetch<'borrow>;
+}
+impl<T> Parameter for &T
+where
+    T: 'static,
+{
+    type ParameterFetch = ParameterFetchRead<T>;
+}
+
+trait ParameterFetch<'fetch> {
     type ResultType;
     fn fetch(archetype: &Archetype) -> Self::ResultType;
 }
 
-impl<'fetch, T> Fetch<'fetch> for &'fetch T {
+impl<'fetch, T: 'fetch> ParameterFetch<'fetch> for ParameterFetchRead<T> {
     type ResultType = RwLockReadGuard<'fetch, Vec<T>>;
     fn fetch(archetype: &Archetype) -> Self::ResultType {
         todo!()
@@ -83,12 +96,11 @@ impl<'fetch, T> Fetch<'fetch> for &'fetch T {
 
 struct Result<'fetch, A, B>
 where
-    A: Fetch<'fetch>,
-    B: Fetch<'fetch>,
+    A: Parameter,
+    B: Parameter,
 {
-    a: A,
-    b: B,
-    phantom: PhantomData<&'fetch A>,
+    a: <A::ParameterFetch as ParameterFetch<'fetch>>::ResultType,
+    b: <B::ParameterFetch as ParameterFetch<'fetch>>::ResultType,
 }
 
 trait ResultIter<'borrow> {
@@ -97,14 +109,14 @@ trait ResultIter<'borrow> {
 }
 impl<'borrow, 'fetch, A, B> ResultIter<'borrow> for Result<'fetch, A, B>
 where
-    A: Fetch<'fetch>,
-    B: Fetch<'fetch>,
-    <A as Fetch<'fetch>>::ResultType: ResultIter<'borrow>,
-    <B as Fetch<'fetch>>::ResultType: ResultIter<'borrow>,
+    A: Parameter,
+    B: Parameter,
+    <A::ParameterFetch as ParameterFetch<'fetch>>::ResultType: ResultIter<'borrow>,
+    <B::ParameterFetch as ParameterFetch<'fetch>>::ResultType: ResultIter<'borrow>,
 {
     type IterType = std::iter::Zip<
-        <A::ResultType as ResultIter<'borrow>>::IterType,
-        <B::ResultType as ResultIter<'borrow>>::IterType,
+        <<A::ParameterFetch as ParameterFetch<'fetch>>::ResultType as ResultIter<'borrow>>::IterType,
+        <<B::ParameterFetch as ParameterFetch<'fetch>>::ResultType as ResultIter<'borrow>>::IterType,
     >;
     fn iter(&'borrow mut self) -> Self::IterType {
         todo!()
