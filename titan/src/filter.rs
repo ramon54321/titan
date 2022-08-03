@@ -6,11 +6,64 @@ use std::{
     sync::{RwLockReadGuard, RwLockWriteGuard},
 };
 
+///
+/// Main Query entry point trait.
+/// Query is implemented for many sizes of tuples containing generic `Parameter`s.
+///
+/// Query exposes the `query` method which is responsible for fetching each `Parameter`s
+/// `ParameterFetch`s ResultType, which in turn implements `ResultIter`.
+///
+/// The `query` method returns a `Result{#}` struct containing the `ResultType` of each `Parameter`.
+/// The `Result{#}` struct also implements `ResultIter`, exposing the `iter` method to the caller
+/// of the `query` method.
+///
 trait Query<'fetch> {
     type ResultType;
     fn query(storage: &'fetch Storage) -> Self::ResultType;
 }
 
+///
+/// Main `Parameter` trait, defining only the associated type `ParameterFetch` which contains some
+/// struct implementing `ParameterFetch`.
+///
+trait Parameter {
+    type ParameterFetch: for<'borrow> ParameterFetch<'borrow>;
+}
+
+/// Implementations for `Parameter` for Read and Write types.
+impl<T> Parameter for &T
+where
+    T: 'static,
+{
+    type ParameterFetch = ParameterFetchRead<T>;
+}
+
+///
+/// Defines the `fetch` method which is called for each `Parameter` from the main `query` method.
+///
+trait ParameterFetch<'fetch> {
+    type ResultType;
+    fn fetch(archetype: &'fetch Archetype) -> Self::ResultType;
+}
+
+/// ParameterFetchRead marker struct.
+struct ParameterFetchRead<T> {
+    phantom: PhantomData<T>,
+}
+/// `ParameterFetch` implementation for Read.
+impl<'fetch, T> ParameterFetch<'fetch> for ParameterFetchRead<T>
+where
+    T: 'static,
+{
+    type ResultType = RwLockReadGuard<'fetch, Vec<T>>;
+    fn fetch(archetype: &'fetch Archetype) -> Self::ResultType {
+        archetype.get_component_vec_lock::<T>()
+    }
+}
+
+///
+/// Implementations of `Query` for `Parameter` tuples.
+///
 impl<'fetch, A, B> Query<'fetch> for (A, B)
 where
     A: 'static + Debug + Parameter,
@@ -28,35 +81,9 @@ where
     }
 }
 
-struct ParameterFetchRead<T> {
-    phantom: PhantomData<T>,
-}
-
-trait Parameter {
-    type ParameterFetch: for<'borrow> ParameterFetch<'borrow>;
-}
-impl<T> Parameter for &T
-where
-    T: 'static,
-{
-    type ParameterFetch = ParameterFetchRead<T>;
-}
-
-trait ParameterFetch<'fetch> {
-    type ResultType;
-    fn fetch(archetype: &'fetch Archetype) -> Self::ResultType;
-}
-
-impl<'fetch, T> ParameterFetch<'fetch> for ParameterFetchRead<T>
-where
-    T: 'static,
-{
-    type ResultType = RwLockReadGuard<'fetch, Vec<T>>;
-    fn fetch(archetype: &'fetch Archetype) -> Self::ResultType {
-        archetype.get_component_vec_lock::<T>()
-    }
-}
-
+///
+/// Result structs for `Paremeter` tuples.
+///
 struct Result<'fetch, A, B>
 where
     A: Parameter,
@@ -66,10 +93,20 @@ where
     b: <B::ParameterFetch as ParameterFetch<'fetch>>::ResultType,
 }
 
+///
+/// Defines the `iter` method which the called of the main `query` method will call. This trait is
+/// implemented on the main `Result{#}` struct itself and the Read and Write locks, which are the
+/// possible `ResultType`s from the various `ParameterFetch` implementations, allowing the main
+/// `Result{#}` implementation to zip the `ParameterFetch` results together.
+///
 trait ResultIter<'borrow> {
     type IterType: Iterator;
     fn iter(&'borrow mut self) -> Self::IterType;
 }
+
+///
+/// ResultIter implementations for all `Result{#}` structs.
+///
 impl<'borrow, 'fetch, A, B> ResultIter<'borrow> for Result<'fetch, A, B>
 where
     A: Parameter,
@@ -85,6 +122,10 @@ where
         izip!(self.a.iter(), self.b.iter())
     }
 }
+
+///
+/// ResultIter implementation for Read
+///
 impl<'borrow, 'fetch, T: 'borrow> ResultIter<'borrow> for RwLockReadGuard<'fetch, Vec<T>> {
     type IterType = std::slice::Iter<'borrow, T>;
     fn iter(&'borrow mut self) -> Self::IterType {
