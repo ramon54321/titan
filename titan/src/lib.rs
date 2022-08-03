@@ -1,7 +1,8 @@
 #![feature(generic_associated_types)]
 
 use bundle::Bundle;
-use filter::QueryTuple;
+//use filter::Query;
+//use filter::QueryParameterFetchResult;
 use registry::{RegisterArchetype, RegisterComponent, Registry};
 use serialization::Serializable;
 use storage::Storage;
@@ -89,15 +90,10 @@ fn master() {
     storage.spawn(&registry, (Age(19), Name("Julia".to_string())));
     storage.spawn(&registry, (Name("Bob".to_string()), Age(29)));
 
-    {
-        let mut query = <(&mut Age, &Name)>::fetch(&storage);
-
-        //println!("{:?}", query);
-        println!("{:?}", query.next());
-    }
-
-    //for q in query {
-    //println!("{:?}", q);
+    //let mut query = <(&mut Age, &Name)>::query(&storage);
+    //println!("{:?}", query);
+    //for (age, name) in query.iter() {
+    //println!("{:?} - {:?}", age, name);
     //}
 
     let storage_serial = storage.serialize(&registry);
