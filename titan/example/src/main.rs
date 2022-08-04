@@ -24,6 +24,13 @@ fn main() {
     println!("Serial: {}", ecs_2_serial);
 
     assert_eq!(ecs_serial, ecs_2_serial);
+
+    for (person,) in ecs_2.query::<(&Person,)>().iter() {
+        println!(
+            "Person is {} tall and {} years old",
+            person.height, person.age
+        );
+    }
 }
 
 #[derive(Serialize, Deserialize)]

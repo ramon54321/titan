@@ -1,6 +1,7 @@
 #![feature(generic_associated_types)]
 
 use bundle::Bundle;
+use query::QueryTuple;
 use registry::{RegisterArchetype, RegisterComponent, Registry};
 use serialization::Serializable;
 use storage::Storage;
@@ -43,6 +44,13 @@ impl ECS {
     ///
     pub fn spawn_bundle<T: Bundle + 'static>(&mut self, bundle: T) {
         self.storage.spawn(&self.registry, bundle)
+    }
+    ///
+    /// Query the storage for all components in archetypes which AT LEAST match the given query
+    /// type.
+    ///
+    pub fn query<'fetch, T: QueryTuple<'fetch>>(&'fetch self) -> T::ResultType {
+        self.storage.query::<T>()
     }
     ///
     /// Serialize entities to JSON.
