@@ -17,7 +17,7 @@ use std::{
 /// The `Result{#}` struct also implements `ResultIter`, exposing the `iter` method to the caller
 /// of the `query` method.
 ///
-trait Query<'fetch> {
+pub trait Query<'fetch> {
     type ResultType;
     fn query(storage: &'fetch Storage) -> Self::ResultType;
 }
@@ -26,31 +26,53 @@ trait Query<'fetch> {
 /// Main `Parameter` trait, defining only the associated type `ParameterFetch` which contains some
 /// struct implementing `ParameterFetch`.
 ///
-trait Parameter {
+pub trait Parameter {
     type ParameterFetch: for<'borrow> ParameterFetch<'borrow>;
 }
 
-/// Implementations for `Parameter` for Read and Write types.
+///
+/// Implementations for `Parameter` for Read.
+///
 impl<T> Parameter for &T
 where
     T: 'static,
 {
     type ParameterFetch = ParameterFetchRead<T>;
 }
+///
+/// Implementations for `Parameter` for Write.
+///
+impl<T> Parameter for &mut T
+where
+    T: 'static,
+{
+    type ParameterFetch = ParameterFetchWrite<T>;
+}
 
 ///
 /// Defines the `fetch` method which is called for each `Parameter` from the main `query` method.
 ///
-trait ParameterFetch<'fetch> {
+pub trait ParameterFetch<'fetch> {
     type ResultType;
     fn fetch(archetype: &'fetch Archetype) -> Self::ResultType;
 }
 
-/// ParameterFetchRead marker struct.
-struct ParameterFetchRead<T> {
+///
+/// ParameterFetch marker struct for Read.
+///
+pub struct ParameterFetchRead<T> {
     phantom: PhantomData<T>,
 }
+///
+/// ParameterFetch marker struct for Write.
+///
+pub struct ParameterFetchWrite<T> {
+    phantom: PhantomData<T>,
+}
+
+///
 /// `ParameterFetch` implementation for Read.
+///
 impl<'fetch, T> ParameterFetch<'fetch> for ParameterFetchRead<T>
 where
     T: 'static,
@@ -59,6 +81,27 @@ where
     fn fetch(archetype: &'fetch Archetype) -> Self::ResultType {
         archetype.get_component_vec_lock::<T>()
     }
+}
+///
+/// `ParameterFetch` implementation for Write.
+///
+impl<'fetch, T> ParameterFetch<'fetch> for ParameterFetchWrite<T>
+where
+    T: 'static,
+{
+    type ResultType = RwLockWriteGuard<'fetch, Vec<T>>;
+    fn fetch(archetype: &'fetch Archetype) -> Self::ResultType {
+        archetype.get_component_vec_lock_mut::<T>()
+    }
+}
+
+pub trait QueryTuple<'fetch>: Query<'fetch> {}
+
+impl<'fetch, A, B> QueryTuple<'fetch> for (A, B)
+where
+    A: 'static + Debug + Parameter,
+    B: 'static + Debug + Parameter,
+{
 }
 
 ///
@@ -84,7 +127,7 @@ where
 ///
 /// Result structs for `Paremeter` tuples.
 ///
-struct Result<'fetch, A, B>
+pub struct Result<'fetch, A, B>
 where
     A: Parameter,
     B: Parameter,
@@ -99,7 +142,7 @@ where
 /// possible `ResultType`s from the various `ParameterFetch` implementations, allowing the main
 /// `Result{#}` implementation to zip the `ParameterFetch` results together.
 ///
-trait ResultIter<'borrow> {
+pub trait ResultIter<'borrow> {
     type IterType: Iterator;
     fn iter(&'borrow mut self) -> Self::IterType;
 }
@@ -133,6 +176,16 @@ impl<'borrow, 'fetch, T: 'borrow> ResultIter<'borrow> for RwLockReadGuard<'fetch
     }
 }
 
+///
+/// ResultIter implementation for Write
+///
+impl<'borrow, 'fetch, T: 'borrow> ResultIter<'borrow> for RwLockWriteGuard<'fetch, Vec<T>> {
+    type IterType = std::slice::IterMut<'borrow, T>;
+    fn iter(&'borrow mut self) -> Self::IterType {
+        <[T]>::iter_mut(self)
+    }
+}
+
 #[test]
 fn fetch_single() {
     use crate::registry::Registry;
@@ -158,8 +211,14 @@ fn fetch_single() {
     storage.spawn(&registry, (Age(19), Name("Julia".to_string())));
     storage.spawn(&registry, (Name("Bob".to_string()), Age(29)));
 
-    let mut query_result = <(&Age, &Name)>::query(&storage);
-    for res in query_result.iter() {
-        println!("{:?}", res);
+    for (age, name) in <(&mut Age, &Name)>::query(&storage).iter() {
+        println!("{:?}", (age.0.clone(), name));
+        age.0 = age.0 + 1;
+    }
+    for (age, name) in <(&mut Age, &Name)>::query(&storage).iter() {
+        println!("{:?}", (age.0.clone(), name));
+    }
+    for (age, name) in storage.query::<(&mut Age, &Name)>().iter() {
+        println!("{:?}", (age.0.clone(), name));
     }
 }

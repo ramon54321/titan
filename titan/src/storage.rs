@@ -1,5 +1,6 @@
 use crate::{
     bundle::{Bundle, BundleKind},
+    query::QueryTuple,
     registry::Registry,
     EntityId,
 };
@@ -58,6 +59,9 @@ impl Storage {
             self.current_entity_id = entity_id + 1;
         }
     }
+    pub(crate) fn query<'fetch, T: QueryTuple<'fetch>>(&'fetch self) -> T::ResultType {
+        <T>::query(self)
+    }
 }
 pub struct Archetype {
     entity_ids: Vec<EntityId>,
@@ -115,20 +119,5 @@ impl Archetype {
             .expect("Could not downcast to lock of component vec")
             .try_write()
             .expect("Could not get from component vec lock")
-    }
-    pub(crate) fn get_component_at_index_unchecked_mut<T: 'static>(
-        &mut self,
-        index: usize,
-    ) -> &mut T {
-        let type_id = TypeId::of::<T>();
-        let raw_component_vec = self
-            .component_vec_locks_by_type_id
-            .get_mut(&type_id)
-            .expect("Could not find component vec for given type_id in archetype")
-            .downcast_mut::<RwLock<Vec<T>>>()
-            .expect("Could not downcast_mut to lock of component vec")
-            .get_mut()
-            .expect("Could not get mut from component vec lock");
-        &mut raw_component_vec[index]
     }
 }
