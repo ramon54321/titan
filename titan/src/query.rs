@@ -96,38 +96,6 @@ where
 }
 
 ///
-/// Implementations of `Query` for `Parameter` tuples.
-///
-impl<'fetch, A, B> Query<'fetch> for (A, B)
-where
-    A: 'static + Debug + Parameter,
-    B: 'static + Debug + Parameter,
-{
-    type ResultType = Result<'fetch, A, B>;
-    fn query(storage: &'fetch Storage) -> Self::ResultType {
-        let archetype = storage.archetype_by_bundle_kind.values().last().unwrap();
-        let component_vec_lock_a = <A::ParameterFetch>::fetch(archetype);
-        let component_vec_lock_b = <B::ParameterFetch>::fetch(archetype);
-        Result {
-            a: component_vec_lock_a,
-            b: component_vec_lock_b,
-        }
-    }
-}
-
-///
-/// Result structs for `Paremeter` tuples.
-///
-pub struct Result<'fetch, A, B>
-where
-    A: Parameter,
-    B: Parameter,
-{
-    a: <A::ParameterFetch as ParameterFetch<'fetch>>::ResultType,
-    b: <B::ParameterFetch as ParameterFetch<'fetch>>::ResultType,
-}
-
-///
 /// Defines the `iter` method which the called of the main `query` method will call. This trait is
 /// implemented on the main `Result{#}` struct itself and the Read and Write locks, which are the
 /// possible `ResultType`s from the various `ParameterFetch` implementations, allowing the main
@@ -136,25 +104,6 @@ where
 pub trait ResultIter<'borrow> {
     type IterType: Iterator;
     fn iter(&'borrow mut self) -> Self::IterType;
-}
-
-///
-/// ResultIter implementations for all `Result{#}` structs.
-///
-impl<'borrow, 'fetch, A, B> ResultIter<'borrow> for Result<'fetch, A, B>
-where
-    A: Parameter,
-    B: Parameter,
-    <A::ParameterFetch as ParameterFetch<'fetch>>::ResultType: ResultIter<'borrow>,
-    <B::ParameterFetch as ParameterFetch<'fetch>>::ResultType: ResultIter<'borrow>,
-{
-    type IterType = std::iter::Zip<
-        <<A::ParameterFetch as ParameterFetch<'fetch>>::ResultType as ResultIter<'borrow>>::IterType,
-        <<B::ParameterFetch as ParameterFetch<'fetch>>::ResultType as ResultIter<'borrow>>::IterType,
-    >;
-    fn iter(&'borrow mut self) -> Self::IterType {
-        izip!(self.a.iter(), self.b.iter())
-    }
 }
 
 ///
@@ -176,6 +125,91 @@ impl<'borrow, 'fetch, T: 'borrow> ResultIter<'borrow> for RwLockWriteGuard<'fetc
         <[T]>::iter_mut(self)
     }
 }
+
+///
+///
+/// Macros for generating tuple size specific structs and implementations.
+///
+///
+
+///
+/// Implementations of `Query` for `Parameter` tuples.
+///
+impl<'fetch, A, B> Query<'fetch> for (A, B)
+where
+    A: 'static + Debug + Parameter,
+    B: 'static + Debug + Parameter,
+{
+    type ResultType = Result2<'fetch, A, B>;
+    fn query(storage: &'fetch Storage) -> Self::ResultType {
+        let archetype = storage.archetype_by_bundle_kind.values().last().unwrap();
+        let component_vec_lock_a = <A::ParameterFetch>::fetch(archetype);
+        let component_vec_lock_b = <B::ParameterFetch>::fetch(archetype);
+        Result2 {
+            a: component_vec_lock_a,
+            b: component_vec_lock_b,
+        }
+    }
+}
+
+///
+/// Result structs for `Paremeter` tuples.
+///
+use paste::paste;
+macro_rules! result_struct {
+    ($count:tt, $($name:ident),*) => {
+        paste!{
+            pub struct [<Result $count>]<'fetch, $($name),*>
+            where
+                $($name: Parameter),*
+            {
+                $([<$name:lower>]: <$name::ParameterFetch as ParameterFetch<'fetch>>::ResultType),*
+            }
+        }
+    };
+}
+result_struct!(1, A);
+result_struct!(2, A, B);
+result_struct!(3, A, B, C);
+result_struct!(4, A, B, C, D);
+result_struct!(5, A, B, C, D, E);
+result_struct!(6, A, B, C, D, E, F);
+result_struct!(7, A, B, C, D, E, F, G);
+result_struct!(8, A, B, C, D, E, F, G, H);
+
+///
+/// ResultIter implementations for all `Result{#}` structs.
+///
+macro_rules! iter_return_parameter {
+    ($name:ident) => {
+        <<<$name::ParameterFetch as ParameterFetch<'fetch>>::ResultType as ResultIter<'borrow>>::IterType as Iterator>::Item
+    };
+}
+macro_rules! result_iter_impl {
+    ($count:tt, $($name:ident),*) => {
+        paste!{
+            impl<'borrow, 'fetch, $($name),*> ResultIter<'borrow> for [<Result $count>]<'fetch, $($name),*>
+            where
+                $($name: Parameter),*,
+                $(<$name::ParameterFetch as ParameterFetch<'fetch>>::ResultType: ResultIter<'borrow>),*,
+            {
+                #[allow(unused_parens)]
+                type IterType = impl Iterator<Item = ($(iter_return_parameter!($name)),*)>;
+                fn iter(&'borrow mut self) -> Self::IterType {
+                    izip!($(self.[<$name:lower>].iter()),*)
+                }
+            }
+        }
+    };
+}
+result_iter_impl!(1, A);
+result_iter_impl!(2, A, B);
+result_iter_impl!(3, A, B, C);
+result_iter_impl!(4, A, B, C, D);
+result_iter_impl!(5, A, B, C, D, E);
+result_iter_impl!(6, A, B, C, D, E, F);
+result_iter_impl!(7, A, B, C, D, E, F, G);
+result_iter_impl!(8, A, B, C, D, E, F, G, H);
 
 #[test]
 fn fetch_single() {
