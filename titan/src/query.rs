@@ -95,15 +95,6 @@ where
     }
 }
 
-pub trait QueryTuple<'fetch>: Query<'fetch> {}
-
-impl<'fetch, A, B> QueryTuple<'fetch> for (A, B)
-where
-    A: 'static + Debug + Parameter,
-    B: 'static + Debug + Parameter,
-{
-}
-
 ///
 /// Implementations of `Query` for `Parameter` tuples.
 ///
@@ -212,13 +203,13 @@ fn fetch_single() {
     storage.spawn(&registry, (Name("Bob".to_string()), Age(29)));
 
     for (age, name) in <(&mut Age, &Name)>::query(&storage).iter() {
-        println!("{:?}", (age.0.clone(), name));
+        println!("{:?}", (&age, name));
         age.0 = age.0 + 1;
     }
     for (age, name) in <(&mut Age, &Name)>::query(&storage).iter() {
-        println!("{:?}", (age.0.clone(), name));
+        println!("{:?}", (age, name));
     }
     for (age, name) in storage.query::<(&mut Age, &Name)>().iter() {
-        println!("{:?}", (age.0.clone(), name));
+        println!("{:?}", (age, name));
     }
 }

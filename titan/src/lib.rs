@@ -1,7 +1,7 @@
 #![feature(generic_associated_types)]
 
 use bundle::Bundle;
-use query::QueryTuple;
+use query::Query;
 use registry::{RegisterArchetype, RegisterComponent, Registry};
 use serialization::Serializable;
 use storage::Storage;
@@ -49,7 +49,7 @@ impl ECS {
     /// Query the storage for all components in archetypes which AT LEAST match the given query
     /// type.
     ///
-    pub fn query<'fetch, T: QueryTuple<'fetch>>(&'fetch self) -> T::ResultType {
+    pub fn query<'fetch, T: Query<'fetch>>(&'fetch self) -> T::ResultType {
         self.storage.query::<T>()
     }
     ///

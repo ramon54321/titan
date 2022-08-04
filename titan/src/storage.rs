@@ -1,6 +1,6 @@
 use crate::{
     bundle::{Bundle, BundleKind},
-    query::QueryTuple,
+    query::Query,
     registry::Registry,
     EntityId,
 };
@@ -59,7 +59,7 @@ impl Storage {
             self.current_entity_id = entity_id + 1;
         }
     }
-    pub(crate) fn query<'fetch, T: QueryTuple<'fetch>>(&'fetch self) -> T::ResultType {
+    pub(crate) fn query<'fetch, T: Query<'fetch>>(&'fetch self) -> T::ResultType {
         <T>::query(self)
     }
 }
