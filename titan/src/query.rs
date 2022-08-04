@@ -1,5 +1,6 @@
 use crate::storage::{Archetype, Storage};
 use itertools::izip;
+use paste::paste;
 use std::{
     fmt::Debug,
     marker::PhantomData,
@@ -135,27 +136,38 @@ impl<'borrow, 'fetch, T: 'borrow> ResultIter<'borrow> for RwLockWriteGuard<'fetc
 ///
 /// Implementations of `Query` for `Parameter` tuples.
 ///
-impl<'fetch, A, B> Query<'fetch> for (A, B)
-where
-    A: 'static + Debug + Parameter,
-    B: 'static + Debug + Parameter,
-{
-    type ResultType = Result2<'fetch, A, B>;
-    fn query(storage: &'fetch Storage) -> Self::ResultType {
-        let archetype = storage.archetype_by_bundle_kind.values().last().unwrap();
-        let component_vec_lock_a = <A::ParameterFetch>::fetch(archetype);
-        let component_vec_lock_b = <B::ParameterFetch>::fetch(archetype);
-        Result2 {
-            a: component_vec_lock_a,
-            b: component_vec_lock_b,
+macro_rules! query_impl {
+    ($count:tt, $($name:ident),*) => {
+        paste!{
+            impl<'fetch, $($name),*> Query<'fetch> for ($($name),*,)
+            where
+                $($name: 'static + Debug + Parameter),*,
+            {
+                type ResultType = [<Result $count>]<'fetch, $($name),*>;
+                fn query(storage: &'fetch Storage) -> Self::ResultType {
+                    // TODO: Find actual archetypes which cover this query bundle
+                    let archetype = storage.archetype_by_bundle_kind.values().last().unwrap();
+                    $(let [<component_vec_lock_ $name:lower>] = <$name::ParameterFetch>::fetch(archetype));*;
+                    [<Result $count>] {
+                        $([<$name:lower>]: [<component_vec_lock_ $name:lower>]),*,
+                    }
+                }
+            }
         }
-    }
+    };
 }
+query_impl!(1, A);
+query_impl!(2, A, B);
+query_impl!(3, A, B, C);
+query_impl!(4, A, B, C, D);
+query_impl!(5, A, B, C, D, E);
+query_impl!(6, A, B, C, D, E, F);
+query_impl!(7, A, B, C, D, E, F, G);
+query_impl!(8, A, B, C, D, E, F, G, H);
 
 ///
 /// Result structs for `Paremeter` tuples.
 ///
-use paste::paste;
 macro_rules! result_struct {
     ($count:tt, $($name:ident),*) => {
         paste!{
