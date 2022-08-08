@@ -2,6 +2,7 @@ use crate::storage::{Archetype, Storage};
 use itertools::izip;
 use paste::paste;
 use std::{
+    any::TypeId,
     fmt::Debug,
     marker::PhantomData,
     sync::{RwLockReadGuard, RwLockWriteGuard},
@@ -146,6 +147,7 @@ macro_rules! query_impl {
                 type ResultType = [<Result $count>]<'fetch, $($name),*>;
                 fn query(storage: &'fetch Storage) -> Self::ResultType {
                     // TODO: Find actual archetypes which cover this query bundle
+                    let archetypes_matching_query = <($($name),*,)>::find_matching_archetypes(storage);
                     let archetype = storage.archetype_by_bundle_kind.values().last().unwrap();
                     $(let [<component_vec_lock_ $name:lower>] = <$name::ParameterFetch>::fetch(archetype));*;
                     [<Result $count>] {
@@ -164,6 +166,40 @@ query_impl!(5, A, B, C, D, E);
 query_impl!(6, A, B, C, D, E, F);
 query_impl!(7, A, B, C, D, E, F, G);
 query_impl!(8, A, B, C, D, E, F, G, H);
+
+///
+/// Archetype matching trait and implementations
+///
+trait MatchArchetype<'a> {
+    type IteratorType;
+    fn find_matching_archetypes(storage: &'a Storage) -> Self::IteratorType;
+}
+macro_rules! match_archetype_impl {
+    ($($name:ident),*) => {
+        paste!{
+            impl<'a, $($name),*> MatchArchetype<'a> for ($($name),*,)
+            where
+                $($name: 'static + Debug + Parameter),*,
+            {
+                type IteratorType = impl Iterator<Item = &'a Archetype>;
+                fn find_matching_archetypes(storage: &'a Storage) -> Self::IteratorType {
+                    storage
+                        .archetype_by_bundle_kind
+                        .values()
+                        .filter(|archetype| $(archetype.has_component::<$name>())&&*)
+                }
+            }
+        }
+    };
+}
+match_archetype_impl!(A);
+match_archetype_impl!(A, B);
+match_archetype_impl!(A, B, C);
+match_archetype_impl!(A, B, C, D);
+match_archetype_impl!(A, B, C, D, E);
+match_archetype_impl!(A, B, C, D, E, F);
+match_archetype_impl!(A, B, C, D, E, F, G);
+match_archetype_impl!(A, B, C, D, E, F, G, H);
 
 ///
 /// Result structs for `Paremeter` tuples.

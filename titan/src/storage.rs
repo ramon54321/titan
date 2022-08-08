@@ -4,12 +4,12 @@ use crate::{
     registry::Registry,
     EntityId,
 };
-use std::sync::RwLock;
 use std::{
     any::{Any, TypeId},
     sync::RwLockReadGuard,
 };
 use std::{collections::HashMap, sync::RwLockWriteGuard};
+use std::{collections::HashSet, sync::RwLock};
 
 pub struct Storage {
     current_entity_id: EntityId,
@@ -25,6 +25,7 @@ impl Storage {
     pub(crate) fn spawn<T: Bundle + 'static>(&mut self, registry: &Registry, bundle: T) {
         self.spawn_with_entity_id(registry, self.current_entity_id, bundle);
 
+        // TODO: Ensure entity_id is incremented correctly
         // Increment entity_id for next spawn
         self.current_entity_id = self.current_entity_id + 1;
     }
@@ -76,6 +77,10 @@ impl Archetype {
     }
     pub fn get_entity_count(&self) -> usize {
         self.entity_ids.len()
+    }
+    pub(crate) fn has_component<T: 'static>(&self) -> bool {
+        let type_id = TypeId::of::<T>();
+        self.component_vec_locks_by_type_id.contains_key(&type_id)
     }
     pub(crate) fn push_component<T: 'static>(&mut self, component: T) {
         let type_id = TypeId::of::<T>();
