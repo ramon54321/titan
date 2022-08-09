@@ -1,8 +1,7 @@
-use crate::storage::{Archetype, Storage};
+use crate::storage::{Archetype, Storage, BaseTypeId};
 use itertools::izip;
 use paste::paste;
 use std::{
-    any::TypeId,
     fmt::Debug,
     marker::PhantomData,
     sync::{RwLockReadGuard, RwLockWriteGuard},
@@ -56,7 +55,7 @@ where
 ///
 pub trait ParameterFetch<'fetch> {
     type ResultType;
-    fn fetch(archetype: &'fetch Archetype) -> Self::ResultType;
+    fn fetch<'a>(archetypes: &'a [&'fetch Archetype]) -> Self::ResultType;
 }
 
 ///
@@ -79,9 +78,13 @@ impl<'fetch, T> ParameterFetch<'fetch> for ParameterFetchRead<T>
 where
     T: 'static,
 {
-    type ResultType = RwLockReadGuard<'fetch, Vec<T>>;
-    fn fetch(archetype: &'fetch Archetype) -> Self::ResultType {
-        archetype.get_component_vec_lock::<T>()
+    type ResultType = Vec<RwLockReadGuard<'fetch, Vec<T>>>;
+    fn fetch<'a>(archetypes: &'a [&'fetch Archetype]) -> Self::ResultType {
+        let mut locks = Vec::new();
+        for archetype in archetypes {
+            locks.push(archetype.get_component_vec_lock::<T>());
+        }
+        locks
     }
 }
 ///
@@ -91,9 +94,13 @@ impl<'fetch, T> ParameterFetch<'fetch> for ParameterFetchWrite<T>
 where
     T: 'static,
 {
-    type ResultType = RwLockWriteGuard<'fetch, Vec<T>>;
-    fn fetch(archetype: &'fetch Archetype) -> Self::ResultType {
-        archetype.get_component_vec_lock_mut::<T>()
+    type ResultType = Vec<RwLockWriteGuard<'fetch, Vec<T>>>;
+    fn fetch<'a>(archetypes: &'a [&'fetch Archetype]) -> Self::ResultType {
+        let mut locks = Vec::new();
+        for archetype in archetypes {
+            locks.push(archetype.get_component_vec_lock_mut::<T>());
+        }
+        locks
     }
 }
 
@@ -105,26 +112,32 @@ where
 ///
 pub trait ResultIter<'borrow> {
     type IterType: Iterator;
-    fn iter(&'borrow mut self) -> Self::IterType;
+    fn result_iter(&'borrow mut self) -> Self::IterType;
 }
 
 ///
 /// ResultIter implementation for Read
 ///
-impl<'borrow, 'fetch, T: 'borrow> ResultIter<'borrow> for RwLockReadGuard<'fetch, Vec<T>> {
-    type IterType = std::slice::Iter<'borrow, T>;
-    fn iter(&'borrow mut self) -> Self::IterType {
-        <[T]>::iter(self)
+impl<'borrow, 'fetch: 'borrow, T: 'fetch> ResultIter<'borrow>
+    for Vec<RwLockReadGuard<'fetch, Vec<T>>>
+{
+    type IterType = impl Iterator<Item = &'borrow T>;
+    fn result_iter(&'borrow mut self) -> Self::IterType {
+        <[_]>::iter(self).map(|guard| guard.iter()).flatten()
     }
 }
 
 ///
 /// ResultIter implementation for Write
 ///
-impl<'borrow, 'fetch, T: 'borrow> ResultIter<'borrow> for RwLockWriteGuard<'fetch, Vec<T>> {
-    type IterType = std::slice::IterMut<'borrow, T>;
-    fn iter(&'borrow mut self) -> Self::IterType {
-        <[T]>::iter_mut(self)
+impl<'borrow, 'fetch: 'borrow, T: 'fetch> ResultIter<'borrow>
+    for Vec<RwLockWriteGuard<'fetch, Vec<T>>>
+{
+    type IterType = impl Iterator<Item = &'borrow mut T>;
+    fn result_iter(&'borrow mut self) -> Self::IterType {
+        <[_]>::iter_mut(self)
+            .map(|guard| guard.iter_mut())
+            .flatten()
     }
 }
 
@@ -142,16 +155,15 @@ macro_rules! query_impl {
         paste!{
             impl<'fetch, $($name),*> Query<'fetch> for ($($name),*,)
             where
-                $($name: 'static + Debug + Parameter),*,
+                $($name: 'static + Debug + Parameter + BaseTypeId),*,
             {
                 type ResultType = [<Result $count>]<'fetch, $($name),*>;
                 fn query(storage: &'fetch Storage) -> Self::ResultType {
-                    // TODO: Find actual archetypes which cover this query bundle
-                    let archetypes_matching_query = <($($name),*,)>::find_matching_archetypes(storage);
-                    let archetype = storage.archetype_by_bundle_kind.values().last().unwrap();
-                    $(let [<component_vec_lock_ $name:lower>] = <$name::ParameterFetch>::fetch(archetype));*;
+                    let archetypes = <($($name),*,)>::find_matching_archetypes(storage);
+                    println!("Archetype count: {}", archetypes.len());
+                    $(let [<component_vec_locks_ $name:lower>] = <$name::ParameterFetch>::fetch(&archetypes[..]));*;
                     [<Result $count>] {
-                        $([<$name:lower>]: [<component_vec_lock_ $name:lower>]),*,
+                        $([<$name:lower>]: [<component_vec_locks_ $name:lower>]),*,
                     }
                 }
             }
@@ -171,22 +183,20 @@ query_impl!(8, A, B, C, D, E, F, G, H);
 /// Archetype matching trait and implementations
 ///
 trait MatchArchetype<'a> {
-    type IteratorType;
-    fn find_matching_archetypes(storage: &'a Storage) -> Self::IteratorType;
+    fn find_matching_archetypes(storage: &Storage) -> Vec<&Archetype>;
 }
 macro_rules! match_archetype_impl {
     ($($name:ident),*) => {
         paste!{
             impl<'a, $($name),*> MatchArchetype<'a> for ($($name),*,)
             where
-                $($name: 'static + Debug + Parameter),*,
+                $($name: 'static + Debug + Parameter + BaseTypeId),*,
             {
-                type IteratorType = impl Iterator<Item = &'a Archetype>;
-                fn find_matching_archetypes(storage: &'a Storage) -> Self::IteratorType {
+                fn find_matching_archetypes(storage: &Storage) -> Vec<&Archetype> {
                     storage
                         .archetype_by_bundle_kind
                         .values()
-                        .filter(|archetype| $(archetype.has_component::<$name>())&&*)
+                        .filter(|archetype| $(archetype.has_component::<$name>())||*).collect()
                 }
             }
         }
@@ -200,6 +210,7 @@ match_archetype_impl!(A, B, C, D, E);
 match_archetype_impl!(A, B, C, D, E, F);
 match_archetype_impl!(A, B, C, D, E, F, G);
 match_archetype_impl!(A, B, C, D, E, F, G, H);
+
 
 ///
 /// Result structs for `Paremeter` tuples.
@@ -243,8 +254,8 @@ macro_rules! result_iter_impl {
             {
                 #[allow(unused_parens)]
                 type IterType = impl Iterator<Item = ($(iter_return_parameter!($name)),*)>;
-                fn iter(&'borrow mut self) -> Self::IterType {
-                    izip!($(self.[<$name:lower>].iter()),*)
+                fn result_iter(&'borrow mut self) -> Self::IterType {
+                    izip!($(self.[<$name:lower>].result_iter()),*)
                 }
             }
         }
@@ -284,14 +295,14 @@ fn fetch_single() {
     storage.spawn(&registry, (Age(19), Name("Julia".to_string())));
     storage.spawn(&registry, (Name("Bob".to_string()), Age(29)));
 
-    for (age, name) in <(&mut Age, &Name)>::query(&storage).iter() {
+    for (age, name) in <(&mut Age, &Name)>::query(&storage).result_iter() {
         println!("{:?}", (&age, name));
         age.0 = age.0 + 1;
     }
-    for (age, name) in <(&mut Age, &Name)>::query(&storage).iter() {
+    for (age, name) in <(&mut Age, &Name)>::query(&storage).result_iter() {
         println!("{:?}", (age, name));
     }
-    for (age, name) in storage.query::<(&mut Age, &Name)>().iter() {
+    for (age, name) in storage.query::<(&mut Age, &Name)>().result_iter() {
         println!("{:?}", (age, name));
     }
 }

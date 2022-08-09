@@ -100,7 +100,7 @@ fn master() {
     storage.spawn(&registry, (Age(19), Name("Julia".to_string())));
     storage.spawn(&registry, (Name("Bob".to_string()), Age(29)));
 
-    for (age, name) in storage.query::<(&mut Age, &Name)>().iter() {
+    for (age, name) in storage.query::<(&mut Age, &Name)>().result_iter() {
         if name.0 == "Julia" {
             age.0 = 34;
         }
@@ -113,7 +113,7 @@ fn master() {
     let new_storage_serial = new_storage.serialize(&registry);
     println!("{}", new_storage_serial);
 
-    for (age, name) in new_storage.query::<(&Age, &Name)>().iter() {
+    for (age, name) in new_storage.query::<(&Age, &Name)>().result_iter() {
         println!("{} is {} years old.", name.0, age.0);
     }
 }

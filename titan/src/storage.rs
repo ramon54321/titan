@@ -78,12 +78,18 @@ impl Archetype {
     pub fn get_entity_count(&self) -> usize {
         self.entity_ids.len()
     }
-    pub(crate) fn has_component<T: 'static>(&self) -> bool {
-        let type_id = TypeId::of::<T>();
+    pub(crate) fn has_component<T: 'static + BaseTypeId>(&self) -> bool {
+        let type_id = T::base_type_id();
+        println!(
+            "{:?} -- {}",
+            type_id,
+            self.component_vec_locks_by_type_id.contains_key(&type_id)
+        );
         self.component_vec_locks_by_type_id.contains_key(&type_id)
     }
     pub(crate) fn push_component<T: 'static>(&mut self, component: T) {
         let type_id = TypeId::of::<T>();
+        println!("Pushing {:?}", type_id);
         if !self.component_vec_locks_by_type_id.contains_key(&type_id) {
             self.component_vec_locks_by_type_id
                 .insert(type_id.clone(), Box::new(RwLock::new(Vec::<T>::new())));
@@ -125,4 +131,30 @@ impl Archetype {
             .try_write()
             .expect("Could not get from component vec lock")
     }
+}
+
+///
+/// Trait to ensure component type_id is for the base type only.
+///
+pub(crate) trait BaseTypeId {
+    fn base_type_id() -> TypeId;
+}
+impl<T: 'static> BaseTypeId for &T {
+    fn base_type_id() -> TypeId {
+        TypeId::of::<T>()
+    }
+}
+impl<T: 'static> BaseTypeId for &mut T {
+    fn base_type_id() -> TypeId {
+        TypeId::of::<T>()
+    }
+}
+
+#[test]
+fn type_ids() {
+    let base = TypeId::of::<u8>();
+    let ref_base = <&u8>::base_type_id();
+    let mut_base = <&mut u8>::base_type_id();
+    assert_eq!(base, ref_base);
+    assert_eq!(base, mut_base);
 }

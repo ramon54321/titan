@@ -1,3 +1,5 @@
+use std::any::TypeId;
+
 use serde::{Deserialize, Serialize};
 use titan::*;
 
@@ -18,22 +20,42 @@ fn basic() {
     },));
 
     let ecs_serial = ecs.serialize();
-    println!("Serial: {}", ecs_serial);
-
     let mut ecs_2 = ECS::default();
     ecs_2.register_component::<Person>("Person");
     ecs_2.register_archetype::<(Person,)>();
     ecs_2.deserialize(&ecs_serial);
-
     let ecs_2_serial = ecs_2.serialize();
-    println!("Serial: {}", ecs_2_serial);
 
     assert_eq!(ecs_serial, ecs_2_serial);
+}
 
-    for person in ecs_2.query::<(&Person,)>().iter() {
-        println!(
-            "Person is {} tall and {} years old",
-            person.height, person.age
-        );
-    }
+#[test]
+fn multi_archetype() {
+    #[derive(Debug, Serialize, Deserialize)]
+    struct Height(u8);
+    #[derive(Debug, Serialize, Deserialize)]
+    struct Age(u8);
+    #[derive(Debug, Serialize, Deserialize)]
+    struct Weight(u8);
+
+    println!("{:?}", TypeId::of::<Age>());
+    println!("{:?}", TypeId::of::<Height>());
+    println!("{:?}", TypeId::of::<Weight>());
+
+    let mut ecs = ECS::default();
+    ecs.register_component::<Height>("Height");
+    ecs.register_component::<Age>("Age");
+    ecs.register_component::<Weight>("Weight");
+    ecs.register_archetype::<(Age,)>();
+    ecs.register_archetype::<(Height, Age)>();
+    ecs.register_archetype::<(Height, Age, Weight)>();
+    ecs.spawn_bundle((Age(10),));
+    ecs.spawn_bundle((Age(20), Height(180)));
+    ecs.spawn_bundle((Age(30),));
+    ecs.spawn_bundle((Age(40), Height(150)));
+    ecs.spawn_bundle((Age(50), Height(160), Weight(80)));
+
+    let mut result = ecs.query::<(&Age, &Height)>();
+    let result: Vec<_> = result.result_iter().collect();
+    println!("Result: {:?}", result);
 }
