@@ -18,7 +18,11 @@ pub use query::ResultIter as ResultIteration;
 type EntityId = usize;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub(crate) struct ComponentKind(String);
+pub struct ComponentKind(String);
+
+pub trait ComponentMeta {
+    fn get_component_kind() -> ComponentKind;
+}
 
 pub struct ECS {
     registry: Registry,

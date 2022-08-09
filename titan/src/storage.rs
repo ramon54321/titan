@@ -4,12 +4,12 @@ use crate::{
     registry::Registry,
     EntityId,
 };
+use std::sync::RwLock;
 use std::{
     any::{Any, TypeId},
     sync::RwLockReadGuard,
 };
 use std::{collections::HashMap, sync::RwLockWriteGuard};
-use std::{collections::HashSet, sync::RwLock};
 
 pub struct Storage {
     current_entity_id: EntityId,

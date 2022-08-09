@@ -20,7 +20,6 @@ type ArchetypeEntityDeserializeFn = Box<dyn Fn(&Value, &mut Storage, &Registry)>
 pub struct Registry {
     type_ids: HashSet<TypeId>,
     type_id_to_kind: HashMap<TypeId, ComponentKind>,
-    kind_to_type_id: HashMap<ComponentKind, TypeId>,
     kind_to_serializer: HashMap<ComponentKind, SerializeFn>,
     kind_to_deserializer: HashMap<ComponentKind, DeserializeFn>,
     bundle_ids: HashSet<BundleId>,
@@ -35,7 +34,6 @@ impl Registry {
         Self {
             type_ids: HashSet::new(),
             type_id_to_kind: HashMap::new(),
-            kind_to_type_id: HashMap::new(),
             kind_to_serializer: HashMap::new(),
             kind_to_deserializer: HashMap::new(),
             bundle_ids: HashSet::new(),
@@ -95,7 +93,6 @@ where
         let kind = ComponentKind(name.to_string());
         registry.type_ids.insert(type_id);
         registry.type_id_to_kind.insert(type_id, kind.clone());
-        registry.kind_to_type_id.insert(kind.clone(), type_id);
 
         // Register SerializeFn
         let kind_serialize_fn = |item: &dyn Any| {
