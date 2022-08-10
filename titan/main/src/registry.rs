@@ -1,7 +1,7 @@
 use crate::{
     bundle::{Bundle, BundleId, BundleKind},
     storage::{Archetype, Storage},
-    ComponentKind,
+    ComponentKind, ComponentMeta,
 };
 use paste::paste;
 use serde::{de::DeserializeOwned, Serialize};
@@ -129,7 +129,7 @@ macro_rules! register_archetype_impl {
             impl<$($name),*> RegisterArchetype for ($($name),*,)
             where
                 $(
-                    $name: Serialize + DeserializeOwned + 'static
+                    $name: Serialize + DeserializeOwned + ComponentMeta + 'static
                  ),*,
             {
                 #[allow(non_snake_case)]
@@ -169,13 +169,6 @@ macro_rules! register_archetype_impl {
                                 let paste!{[<component_ $name _value>]} =
                                     serde_json::to_value(paste!{[<component_ $name>]}).unwrap();
                              )*
-
-                            //$(
-                                ////let paste!{[<component_ $name>]} =
-                                    ////archetype.get_component_at_index_unchecked_mut::<$name>(entity_index);
-                                //let paste!{[<component_ $name _value>]} =
-                                    //serde_json::to_value(paste!{[<component_ $name>]}).unwrap();
-                             //)*
 
                             // Build entity object
                             let mut entity_object = Map::new();
@@ -240,25 +233,7 @@ register_archetype_impl! { A }
 register_archetype_impl! { A, B }
 register_archetype_impl! { A, B, C }
 register_archetype_impl! { A, B, C, D }
-
-#[test]
-fn can_register_simple() {
-    use serde::Deserialize;
-    #[derive(Serialize, Deserialize)]
-    struct Name(String);
-
-    let mut registry = Registry::new();
-    registry.register_component::<Name>(&"Name");
-
-    assert_eq!(registry.type_ids.len(), 1);
-    assert_eq!(registry.type_id_to_kind.len(), 1);
-
-    let component_type_id = TypeId::of::<Name>();
-    assert_eq!(
-        *registry.type_id_to_kind.get(&component_type_id).unwrap(),
-        ComponentKind("Name".to_string()),
-    );
-
-    assert_eq!(registry.kind_to_serializer.len(), 1);
-    assert_eq!(registry.kind_to_deserializer.len(), 1);
-}
+register_archetype_impl! { A, B, C, D, E }
+register_archetype_impl! { A, B, C, D, E, F }
+register_archetype_impl! { A, B, C, D, E, F, G }
+register_archetype_impl! { A, B, C, D, E, F, G, H }

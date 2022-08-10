@@ -2,13 +2,10 @@ use crate::{
     bundle::{Bundle, BundleKind},
     query::Query,
     registry::Registry,
-    EntityId,
+    ComponentKind, ComponentMeta, EntityId,
 };
 use std::sync::RwLock;
-use std::{
-    any::{Any, TypeId},
-    sync::RwLockReadGuard,
-};
+use std::{any::Any, sync::RwLockReadGuard};
 use std::{collections::HashMap, sync::RwLockWriteGuard};
 
 pub struct Storage {
@@ -66,37 +63,37 @@ impl Storage {
 }
 pub struct Archetype {
     entity_ids: Vec<EntityId>,
-    component_vec_locks_by_type_id: HashMap<TypeId, Box<dyn Any>>,
+    component_vec_locks_by_component_kind: HashMap<ComponentKind, Box<dyn Any>>,
 }
 impl Archetype {
     fn new() -> Self {
         Archetype {
             entity_ids: Vec::new(),
-            component_vec_locks_by_type_id: HashMap::new(),
+            component_vec_locks_by_component_kind: HashMap::new(),
         }
     }
     pub fn get_entity_count(&self) -> usize {
         self.entity_ids.len()
     }
-    pub(crate) fn has_component<T: 'static + BaseTypeId>(&self) -> bool {
-        let type_id = T::base_type_id();
-        println!(
-            "{:?} -- {}",
-            type_id,
-            self.component_vec_locks_by_type_id.contains_key(&type_id)
-        );
-        self.component_vec_locks_by_type_id.contains_key(&type_id)
+    pub(crate) fn has_component<T: 'static + ComponentMeta>(&self) -> bool {
+        let component_kind = T::get_component_kind();
+        self.component_vec_locks_by_component_kind
+            .contains_key(&component_kind)
     }
-    pub(crate) fn push_component<T: 'static>(&mut self, component: T) {
-        let type_id = TypeId::of::<T>();
-        println!("Pushing {:?}", type_id);
-        if !self.component_vec_locks_by_type_id.contains_key(&type_id) {
-            self.component_vec_locks_by_type_id
-                .insert(type_id.clone(), Box::new(RwLock::new(Vec::<T>::new())));
+    pub(crate) fn push_component<T: 'static + ComponentMeta>(&mut self, component: T) {
+        let component_kind = T::get_component_kind();
+        if !self
+            .component_vec_locks_by_component_kind
+            .contains_key(&component_kind)
+        {
+            self.component_vec_locks_by_component_kind.insert(
+                component_kind.clone(),
+                Box::new(RwLock::new(Vec::<T>::new())),
+            );
         }
         let component_vec = self
-            .component_vec_locks_by_type_id
-            .get_mut(&type_id)
+            .component_vec_locks_by_component_kind
+            .get_mut(&component_kind)
             .unwrap()
             .downcast_mut::<RwLock<Vec<T>>>()
             .expect("Could not downcast component vec to Vec<T>");
@@ -111,50 +108,28 @@ impl Archetype {
     pub(crate) fn get_entity_id_at_index_unchecked(&self, index: usize) -> EntityId {
         self.entity_ids[index]
     }
-    pub(crate) fn get_component_vec_lock<T: 'static>(&self) -> RwLockReadGuard<Vec<T>> {
-        let type_id = TypeId::of::<T>();
-        self.component_vec_locks_by_type_id
-            .get(&type_id)
+    pub(crate) fn get_component_vec_lock<T: 'static + ComponentMeta>(
+        &self,
+    ) -> RwLockReadGuard<Vec<T>> {
+        let component_kind = T::get_component_kind();
+        self.component_vec_locks_by_component_kind
+            .get(&component_kind)
             .expect("Could not find component vec for given type_id in archetype")
             .downcast_ref::<RwLock<Vec<T>>>()
             .expect("Could not downcast to lock of component vec")
             .try_read()
             .expect("Could not get from component vec lock")
     }
-    pub(crate) fn get_component_vec_lock_mut<T: 'static>(&self) -> RwLockWriteGuard<Vec<T>> {
-        let type_id = TypeId::of::<T>();
-        self.component_vec_locks_by_type_id
-            .get(&type_id)
+    pub(crate) fn get_component_vec_lock_mut<T: 'static + ComponentMeta>(
+        &self,
+    ) -> RwLockWriteGuard<Vec<T>> {
+        let component_kind = T::get_component_kind();
+        self.component_vec_locks_by_component_kind
+            .get(&component_kind)
             .expect("Could not find component vec for given type_id in archetype")
             .downcast_ref::<RwLock<Vec<T>>>()
             .expect("Could not downcast to lock of component vec")
             .try_write()
             .expect("Could not get from component vec lock")
     }
-}
-
-///
-/// Trait to ensure component type_id is for the base type only.
-///
-pub(crate) trait BaseTypeId {
-    fn base_type_id() -> TypeId;
-}
-impl<T: 'static> BaseTypeId for &T {
-    fn base_type_id() -> TypeId {
-        TypeId::of::<T>()
-    }
-}
-impl<T: 'static> BaseTypeId for &mut T {
-    fn base_type_id() -> TypeId {
-        TypeId::of::<T>()
-    }
-}
-
-#[test]
-fn type_ids() {
-    let base = TypeId::of::<u8>();
-    let ref_base = <&u8>::base_type_id();
-    let mut_base = <&mut u8>::base_type_id();
-    assert_eq!(base, ref_base);
-    assert_eq!(base, mut_base);
 }

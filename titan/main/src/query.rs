@@ -1,4 +1,5 @@
-use crate::storage::{Archetype, Storage, BaseTypeId};
+use crate::storage::{Archetype, Storage};
+use crate::ComponentMeta;
 use itertools::izip;
 use paste::paste;
 use std::{
@@ -36,7 +37,7 @@ pub trait Parameter {
 ///
 impl<T> Parameter for &T
 where
-    T: 'static,
+    T: 'static + ComponentMeta,
 {
     type ParameterFetch = ParameterFetchRead<T>;
 }
@@ -45,7 +46,7 @@ where
 ///
 impl<T> Parameter for &mut T
 where
-    T: 'static,
+    T: 'static + ComponentMeta,
 {
     type ParameterFetch = ParameterFetchWrite<T>;
 }
@@ -76,7 +77,7 @@ pub struct ParameterFetchWrite<T> {
 ///
 impl<'fetch, T> ParameterFetch<'fetch> for ParameterFetchRead<T>
 where
-    T: 'static,
+    T: 'static + ComponentMeta,
 {
     type ResultType = Vec<RwLockReadGuard<'fetch, Vec<T>>>;
     fn fetch<'a>(archetypes: &'a [&'fetch Archetype]) -> Self::ResultType {
@@ -92,7 +93,7 @@ where
 ///
 impl<'fetch, T> ParameterFetch<'fetch> for ParameterFetchWrite<T>
 where
-    T: 'static,
+    T: 'static + ComponentMeta,
 {
     type ResultType = Vec<RwLockWriteGuard<'fetch, Vec<T>>>;
     fn fetch<'a>(archetypes: &'a [&'fetch Archetype]) -> Self::ResultType {
@@ -155,7 +156,7 @@ macro_rules! query_impl {
         paste!{
             impl<'fetch, $($name),*> Query<'fetch> for ($($name),*,)
             where
-                $($name: 'static + Debug + Parameter + BaseTypeId),*,
+                $($name: 'static + Debug + Parameter + ComponentMeta),*,
             {
                 type ResultType = [<Result $count>]<'fetch, $($name),*>;
                 fn query(storage: &'fetch Storage) -> Self::ResultType {
@@ -190,7 +191,7 @@ macro_rules! match_archetype_impl {
         paste!{
             impl<'a, $($name),*> MatchArchetype<'a> for ($($name),*,)
             where
-                $($name: 'static + Debug + Parameter + BaseTypeId),*,
+                $($name: 'static + Debug + Parameter + ComponentMeta),*,
             {
                 fn find_matching_archetypes(storage: &Storage) -> Vec<&Archetype> {
                     storage
@@ -210,7 +211,6 @@ match_archetype_impl!(A, B, C, D, E);
 match_archetype_impl!(A, B, C, D, E, F);
 match_archetype_impl!(A, B, C, D, E, F, G);
 match_archetype_impl!(A, B, C, D, E, F, G, H);
-
 
 ///
 /// Result structs for `Paremeter` tuples.
@@ -249,7 +249,7 @@ macro_rules! result_iter_impl {
         paste!{
             impl<'borrow, 'fetch, $($name),*> ResultIter<'borrow> for [<Result $count>]<'fetch, $($name),*>
             where
-                $($name: Parameter),*,
+                $($name: Parameter + ComponentMeta),*,
                 $(<$name::ParameterFetch as ParameterFetch<'fetch>>::ResultType: ResultIter<'borrow>),*,
             {
                 #[allow(unused_parens)]
@@ -269,40 +269,3 @@ result_iter_impl!(5, A, B, C, D, E);
 result_iter_impl!(6, A, B, C, D, E, F);
 result_iter_impl!(7, A, B, C, D, E, F, G);
 result_iter_impl!(8, A, B, C, D, E, F, G, H);
-
-#[test]
-fn fetch_single() {
-    use crate::registry::Registry;
-    use serde::{Deserialize, Serialize};
-    #[derive(Debug, Serialize, Deserialize)]
-    struct Age(u8);
-    #[derive(Debug, Serialize, Deserialize)]
-    struct Name(String);
-    #[derive(Debug, Serialize, Deserialize)]
-    struct Person {
-        height: u16,
-        weight: u16,
-    }
-
-    let mut registry = Registry::new();
-    registry.register_component::<Age>(&"Age");
-    registry.register_component::<Name>(&"Name");
-    registry.register_component::<Person>(&"Person");
-    registry.register_archetype::<(Name, Age)>();
-
-    let mut storage = Storage::new();
-    storage.spawn(&registry, (Age(23), Name("Jeff".to_string())));
-    storage.spawn(&registry, (Age(19), Name("Julia".to_string())));
-    storage.spawn(&registry, (Name("Bob".to_string()), Age(29)));
-
-    for (age, name) in <(&mut Age, &Name)>::query(&storage).result_iter() {
-        println!("{:?}", (&age, name));
-        age.0 = age.0 + 1;
-    }
-    for (age, name) in <(&mut Age, &Name)>::query(&storage).result_iter() {
-        println!("{:?}", (age, name));
-    }
-    for (age, name) in storage.query::<(&mut Age, &Name)>().result_iter() {
-        println!("{:?}", (age, name));
-    }
-}

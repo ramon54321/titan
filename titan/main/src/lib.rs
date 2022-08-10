@@ -6,6 +6,7 @@ use query::Query;
 use registry::{RegisterArchetype, RegisterComponent, Registry};
 use serialization::Serializable;
 use storage::Storage;
+pub use titan_macros::component;
 
 mod bundle;
 mod query;
@@ -76,48 +77,5 @@ impl Default for ECS {
             registry: Registry::new(),
             storage: Storage::new(),
         }
-    }
-}
-
-#[test]
-fn master() {
-    use serde::{Deserialize, Serialize};
-
-    #[derive(Debug, Serialize, Deserialize)]
-    struct Age(u8);
-    #[derive(Debug, Serialize, Deserialize)]
-    struct Name(String);
-    #[derive(Debug, Serialize, Deserialize)]
-    struct Person {
-        height: u16,
-        weight: u16,
-    }
-
-    let mut registry = Registry::new();
-    registry.register_component::<Age>(&"Age");
-    registry.register_component::<Name>(&"Name");
-    registry.register_component::<Person>(&"Person");
-    registry.register_archetype::<(Name, Age)>();
-
-    let mut storage = Storage::new();
-    storage.spawn(&registry, (Age(23), Name("Jeff".to_string())));
-    storage.spawn(&registry, (Age(19), Name("Julia".to_string())));
-    storage.spawn(&registry, (Name("Bob".to_string()), Age(29)));
-
-    for (age, name) in storage.query::<(&mut Age, &Name)>().result_iter() {
-        if name.0 == "Julia" {
-            age.0 = 34;
-        }
-    }
-
-    let storage_serial = storage.serialize(&registry);
-    println!("{}", storage_serial);
-
-    let new_storage = Storage::deserialize(&storage_serial, &registry);
-    let new_storage_serial = new_storage.serialize(&registry);
-    println!("{}", new_storage_serial);
-
-    for (age, name) in new_storage.query::<(&Age, &Name)>().result_iter() {
-        println!("{} is {} years old.", name.0, age.0);
     }
 }

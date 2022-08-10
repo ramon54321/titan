@@ -11,9 +11,9 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
     let expanded = quote! {
         #[derive(Debug, serde::Serialize, serde::Deserialize)]
         #item_struct
-        impl project_kind::HasLayout for #item_struct_name {
-            fn get_name(&self) -> String {
-                String::from(#item_struct_name_string)
+        impl titan::ComponentMeta for #item_struct_name {
+            fn get_component_kind() -> titan::ComponentKind {
+                titan::ComponentKind(String::from(#item_struct_name_string))
             }
         }
     };

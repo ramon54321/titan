@@ -1,5 +1,4 @@
-use crate::EntityId;
-use crate::{storage::Archetype, ComponentKind};
+use crate::{storage::Archetype, ComponentKind, ComponentMeta, EntityId};
 use std::any::TypeId;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -37,7 +36,7 @@ macro_rules! bundle_impl {
     ) => {
         impl<$($name),*> Bundle for ($($name),*,)
         where
-            $($name: 'static),* {
+            $($name: 'static + ComponentMeta),* {
             fn push_into_archetype(self, entity_id: EntityId, archetype: &mut Archetype) {
                 archetype.push_entity_id(entity_id);
                 $(archetype.push_component(self.$i));*
@@ -60,3 +59,7 @@ bundle_impl! {(A, 0)}
 bundle_impl! {(A, 0), (B, 1)}
 bundle_impl! {(A, 0), (B, 1), (C, 2)}
 bundle_impl! {(A, 0), (B, 1), (C, 2), (D, 3)}
+bundle_impl! {(A, 0), (B, 1), (C, 2), (D, 3), (E, 4)}
+bundle_impl! {(A, 0), (B, 1), (C, 2), (D, 3), (E, 4), (F, 5)}
+bundle_impl! {(A, 0), (B, 1), (C, 2), (D, 3), (E, 4), (F, 5), (G, 6)}
+bundle_impl! {(A, 0), (B, 1), (C, 2), (D, 3), (E, 4), (F, 5), (G, 6), (H, 7)}
