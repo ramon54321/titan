@@ -16,6 +16,16 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
                 titan::ComponentKind(String::from(#item_struct_name_string))
             }
         }
+        impl titan::ComponentMeta for &#item_struct_name {
+            fn get_component_kind() -> titan::ComponentKind {
+                titan::ComponentKind(String::from(#item_struct_name_string))
+            }
+        }
+        impl titan::ComponentMeta for &mut #item_struct_name {
+            fn get_component_kind() -> titan::ComponentKind {
+                titan::ComponentKind(String::from(#item_struct_name_string))
+            }
+        }
     };
     TokenStream::from(expanded)
 }

@@ -3,7 +3,7 @@
 
 use bundle::Bundle;
 use query::Query;
-use registry::{RegisterArchetype, RegisterComponent, Registry};
+use registry::{RegisterArchetype, RegisterComponent};
 use serialization::Serializable;
 use storage::Storage;
 pub use titan_macros::component;
@@ -15,11 +15,12 @@ mod serialization;
 mod storage;
 
 pub use query::ResultIter as ResultIteration;
+pub use registry::Registry;
 
 type EntityId = usize;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct ComponentKind(String);
+pub struct ComponentKind(pub String);
 
 pub trait ComponentMeta {
     fn get_component_kind() -> ComponentKind;
