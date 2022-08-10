@@ -28,12 +28,30 @@ fn basic() {
 }
 
 #[test]
-fn multi_archetype() {
+fn bundle_kinds() {
     #[component]
     struct Height(u8);
     #[component]
     struct Age(u8);
     #[component]
+    struct Weight(u8);
+
+    let bundle_kind_a = <(Height, Age, Weight)>::get_bundle_kind();
+    let bundle_kind_b = <(Age, Weight, Height)>::get_bundle_kind();
+
+    assert_eq!(bundle_kind_a, bundle_kind_b);
+}
+
+#[test]
+fn filter_archetypes_simple() {
+    #[component]
+    #[derive(PartialEq)]
+    struct Height(u8);
+    #[component]
+    #[derive(PartialEq)]
+    struct Age(u8);
+    #[component]
+    #[derive(PartialEq)]
     struct Weight(u8);
 
     let mut ecs = ECS::default();
@@ -51,5 +69,9 @@ fn multi_archetype() {
 
     let mut result = ecs.query::<(&Age, &Height)>();
     let result: Vec<_> = result.result_iter().collect();
-    println!("Result: {:?}", result);
+
+    assert!(result.contains(&(&Age(20), &Height(180))));
+    assert!(result.contains(&(&Age(40), &Height(150))));
+    assert!(result.contains(&(&Age(50), &Height(160))));
+    assert_eq!(result.len(), 3);
 }

@@ -1,7 +1,7 @@
 #![feature(generic_associated_types)]
 #![feature(type_alias_impl_trait)]
 
-use bundle::Bundle;
+pub use bundle::Bundle;
 use query::Query;
 use registry::{RegisterArchetype, RegisterComponent, Registry};
 use serialization::Serializable;
@@ -36,7 +36,7 @@ pub trait ComponentMeta {
 }
 
 pub struct ECS {
-    registry: Registry,
+    pub registry: Registry,
     storage: Storage,
 }
 impl ECS {
@@ -59,7 +59,7 @@ impl ECS {
     /// Spawn bundle of components into new entity.
     ///
     pub fn spawn_bundle<T: Bundle + 'static>(&mut self, bundle: T) {
-        self.storage.spawn(&self.registry, bundle)
+        self.storage.spawn(bundle)
     }
     ///
     /// Query the storage for all components in archetypes which AT LEAST match the given query

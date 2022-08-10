@@ -1,5 +1,5 @@
 use crate::{
-    bundle::{Bundle, BundleId, BundleKind},
+    bundle::BundleKind,
     storage::{Archetype, Storage},
     ComponentKind, ComponentMeta,
 };
@@ -15,18 +15,15 @@ use std::{
 type SerializeFn = Box<dyn Fn(&dyn Any) -> Value>;
 type DeserializeFn = Box<dyn Fn(&str) -> Box<dyn Any>>;
 type ArchetypeEntitySerializeFn = Box<dyn Fn(usize, &Archetype, &BundleKind) -> Value>;
-type ArchetypeEntityDeserializeFn = Box<dyn Fn(&Value, &mut Storage, &Registry)>;
+type ArchetypeEntityDeserializeFn = Box<dyn Fn(&Value, &mut Storage)>;
 
 pub struct Registry {
     kinds: HashSet<ComponentKind>,
-    //type_id_to_kind: HashMap<TypeId, ComponentKind>,
     kind_to_serializer: HashMap<ComponentKind, SerializeFn>,
     kind_to_deserializer: HashMap<ComponentKind, DeserializeFn>,
-    bundle_ids: HashSet<BundleId>,
-    bundle_id_to_bundle_kind: HashMap<BundleId, BundleKind>,
-    bundle_kind_to_bundle_id: HashMap<BundleKind, BundleId>,
+    bundle_kinds: HashSet<BundleKind>,
     bundle_kind_to_archetype_entity_serialize_fn: HashMap<BundleKind, ArchetypeEntitySerializeFn>,
-    bundle_kind_to_archetype_entity_deserialize_fn:
+    pub bundle_kind_to_archetype_entity_deserialize_fn:
         HashMap<BundleKind, ArchetypeEntityDeserializeFn>,
 }
 impl Registry {
@@ -35,9 +32,7 @@ impl Registry {
             kinds: HashSet::new(),
             kind_to_serializer: HashMap::new(),
             kind_to_deserializer: HashMap::new(),
-            bundle_ids: HashSet::new(),
-            bundle_id_to_bundle_kind: HashMap::new(),
-            bundle_kind_to_bundle_id: HashMap::new(),
+            bundle_kinds: HashSet::new(),
             bundle_kind_to_archetype_entity_serialize_fn: HashMap::new(),
             bundle_kind_to_archetype_entity_deserialize_fn: HashMap::new(),
         }
@@ -48,19 +43,16 @@ impl Registry {
     pub(crate) fn register_archetype<T: RegisterArchetype>(&mut self) {
         T::register(self);
     }
-    pub(crate) fn bundle_id_to_bundle_kind(&self, bundle_id: BundleId) -> BundleKind {
-        self.bundle_id_to_bundle_kind
-                .get(&bundle_id)
-                .expect("Could not get bundle kind given bundle_id; likely caused by not registering the corresponding archetype")
-                .clone()
-    }
     pub(crate) fn bundle_kind_to_archetype_entity_serialize_fn(
         &self,
         kind: BundleKind,
     ) -> &ArchetypeEntitySerializeFn {
         self.bundle_kind_to_archetype_entity_serialize_fn
             .get(&kind)
-            .expect("Could not get serialize_fn given kind")
+            .expect(&format!(
+                "Could not get serialize_fn given bundle_kind {:?}. Are you sure the archetype has been registered?",
+                kind
+            ))
     }
     pub(crate) fn bundle_kind_to_archetype_entity_deserialize_fn(
         &self,
@@ -68,7 +60,10 @@ impl Registry {
     ) -> &ArchetypeEntityDeserializeFn {
         self.bundle_kind_to_archetype_entity_deserialize_fn
             .get(&kind)
-            .expect("Could not get deserialize_fn given kind")
+            .expect(&format!(
+                "Could not get deserialize_fn given bundle_kind {:?}. Are you sure the archetype has been registered?",
+                kind,
+            ))
     }
 }
 
@@ -125,18 +120,11 @@ macro_rules! register_archetype_impl {
             {
                 #[allow(non_snake_case)]
                 fn register(registry: &mut Registry) {
-                    // Register TypeId and Kind
+                    // Register Kind
                     $(let paste!{[<kind_ $name>]} = <$name>::get_component_kind();)*
-                    let bundle_id = <($($name),*,)>::get_bundle_id();
                     let bundle_kind = BundleKind::from_component_kinds(&[$(paste!{[<kind_ $name>]}),*]);
 
-                    registry.bundle_ids.insert(bundle_id.clone());
-                    registry
-                        .bundle_id_to_bundle_kind
-                        .insert(bundle_id.clone(), bundle_kind.clone());
-                    registry
-                        .bundle_kind_to_bundle_id
-                        .insert(bundle_kind.clone(), bundle_id.clone());
+                    registry.bundle_kinds.insert(bundle_kind.clone());
 
                     // Register SerializeFn
                     let archetype_entity_serialize_fn =
@@ -172,7 +160,7 @@ macro_rules! register_archetype_impl {
 
                     // Register DeserializeFn
                     let archetype_entity_deserialize_fn =
-                        |entity_value: &Value, storage: &mut Storage, registry: &Registry| {
+                        |entity_value: &Value, storage: &mut Storage| {
                             let entity_object = entity_value
                                 .as_object()
                                 .expect("Could not parse JSON value as object");
@@ -197,7 +185,7 @@ macro_rules! register_archetype_impl {
                                      ),*,
                                              );
 
-                            storage.spawn_with_entity_id(registry, entity_id as usize, bundle);
+                            storage.spawn_with_entity_id(entity_id as usize, bundle);
                         };
                     registry
                         .bundle_kind_to_archetype_entity_deserialize_fn

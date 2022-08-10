@@ -1,7 +1,6 @@
 use crate::{
     bundle::{Bundle, BundleKind},
     query::Query,
-    registry::Registry,
     ComponentKind, ComponentMeta, EntityId,
 };
 use std::sync::RwLock;
@@ -19,8 +18,8 @@ impl Storage {
             archetype_by_bundle_kind: HashMap::new(),
         }
     }
-    pub(crate) fn spawn<T: Bundle + 'static>(&mut self, registry: &Registry, bundle: T) {
-        self.spawn_with_entity_id(registry, self.current_entity_id, bundle);
+    pub(crate) fn spawn<T: Bundle + 'static>(&mut self, bundle: T) {
+        self.spawn_with_entity_id(self.current_entity_id, bundle);
 
         // TODO: Ensure entity_id is incremented correctly
         // Increment entity_id for next spawn
@@ -28,12 +27,10 @@ impl Storage {
     }
     pub(crate) fn spawn_with_entity_id<T: Bundle + 'static>(
         &mut self,
-        registry: &Registry,
         entity_id: EntityId,
         bundle: T,
     ) {
-        let bundle_id = T::get_bundle_id();
-        let bundle_kind = registry.bundle_id_to_bundle_kind(bundle_id);
+        let bundle_kind = T::get_bundle_kind();
 
         // Ensure archetype exists
         let archetype = {

@@ -42,7 +42,7 @@ impl Serializable<Storage> for Storage {
             let bundle_kind = BundleKind(bundle_kind_string);
             let archetype_entity_deserialize_fn =
                 registry.bundle_kind_to_archetype_entity_deserialize_fn(bundle_kind);
-            (archetype_entity_deserialize_fn)(entity_value, &mut storage, registry);
+            (archetype_entity_deserialize_fn)(entity_value, &mut storage);
         }
         storage
     }

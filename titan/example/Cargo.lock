@@ -103,6 +103,7 @@ dependencies = [
  "paste",
  "serde",
  "serde_json",
+ "titan_macros",
 ]
 
 [[package]]
@@ -111,6 +112,16 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "titan",
+ "titan_macros",
+]
+
+[[package]]
+name = "titan_macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
