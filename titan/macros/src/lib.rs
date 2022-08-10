@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse, ExprCall, ItemStruct, PathArguments, Type};
+use syn::{parse, ItemStruct};
 
 #[proc_macro_attribute]
 pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {

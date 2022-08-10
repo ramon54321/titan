@@ -10,7 +10,7 @@ fn basic() {
     }
 
     let mut ecs = ECS::default();
-    ecs.register_component::<Person>("Person");
+    ecs.register_component::<Person>();
     ecs.register_archetype::<(Person,)>();
     ecs.spawn_bundle((Person {
         age: 34,
@@ -19,7 +19,7 @@ fn basic() {
 
     let ecs_serial = ecs.serialize();
     let mut ecs_2 = ECS::default();
-    ecs_2.register_component::<Person>("Person");
+    ecs_2.register_component::<Person>();
     ecs_2.register_archetype::<(Person,)>();
     ecs_2.deserialize(&ecs_serial);
     let ecs_2_serial = ecs_2.serialize();
@@ -37,9 +37,9 @@ fn multi_archetype() {
     struct Weight(u8);
 
     let mut ecs = ECS::default();
-    ecs.register_component::<Height>("Height");
-    ecs.register_component::<Age>("Age");
-    ecs.register_component::<Weight>("Weight");
+    ecs.register_component::<Height>();
+    ecs.register_component::<Age>();
+    ecs.register_component::<Weight>();
     ecs.register_archetype::<(Age,)>();
     ecs.register_archetype::<(Height, Age)>();
     ecs.register_archetype::<(Height, Age, Weight)>();

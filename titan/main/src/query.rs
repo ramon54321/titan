@@ -161,7 +161,6 @@ macro_rules! query_impl {
                 type ResultType = [<Result $count>]<'fetch, $($name),*>;
                 fn query(storage: &'fetch Storage) -> Self::ResultType {
                     let archetypes = <($($name),*,)>::find_matching_archetypes(storage);
-                    println!("Archetype count: {}", archetypes.len());
                     $(let [<component_vec_locks_ $name:lower>] = <$name::ParameterFetch>::fetch(&archetypes[..]));*;
                     [<Result $count>] {
                         $([<$name:lower>]: [<component_vec_locks_ $name:lower>]),*,
@@ -197,7 +196,7 @@ macro_rules! match_archetype_impl {
                     storage
                         .archetype_by_bundle_kind
                         .values()
-                        .filter(|archetype| $(archetype.has_component::<$name>())||*).collect()
+                        .filter(|archetype| $(archetype.has_component::<$name>())&&*).collect()
                 }
             }
         }

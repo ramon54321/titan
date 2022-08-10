@@ -3,7 +3,7 @@
 
 use bundle::Bundle;
 use query::Query;
-use registry::{RegisterArchetype, RegisterComponent};
+use registry::{RegisterArchetype, RegisterComponent, Registry};
 use serialization::Serializable;
 use storage::Storage;
 pub use titan_macros::component;
@@ -15,13 +15,22 @@ mod serialization;
 mod storage;
 
 pub use query::ResultIter as ResultIteration;
-pub use registry::Registry;
 
+///
+/// Type for all enitity identifiers.
+///
 type EntityId = usize;
 
+///
+/// The main identifier for any given component. No two components can have equal `ComponentKind`s.
+///
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct ComponentKind(pub String);
 
+///
+/// MetaData methods for components. This trait is implemented by the `component` attribute macro.
+/// These methods are used by titan internals.
+///
 pub trait ComponentMeta {
     fn get_component_kind() -> ComponentKind;
 }
@@ -34,8 +43,8 @@ impl ECS {
     ///
     /// Register new component.
     ///
-    pub fn register_component<T: RegisterComponent>(&mut self, name: &str) {
-        self.registry.register_component::<T>(name);
+    pub fn register_component<T: RegisterComponent>(&mut self) {
+        self.registry.register_component::<T>();
     }
     ///
     /// Register new archetype.

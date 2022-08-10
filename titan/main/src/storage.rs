@@ -114,7 +114,7 @@ impl Archetype {
         let component_kind = T::get_component_kind();
         self.component_vec_locks_by_component_kind
             .get(&component_kind)
-            .expect("Could not find component vec for given type_id in archetype")
+            .expect("Could not find component vec for given component_kind in archetype")
             .downcast_ref::<RwLock<Vec<T>>>()
             .expect("Could not downcast to lock of component vec")
             .try_read()
@@ -126,7 +126,7 @@ impl Archetype {
         let component_kind = T::get_component_kind();
         self.component_vec_locks_by_component_kind
             .get(&component_kind)
-            .expect("Could not find component vec for given type_id in archetype")
+            .expect("Could not find component vec for given component_kind in archetype")
             .downcast_ref::<RwLock<Vec<T>>>()
             .expect("Could not downcast to lock of component vec")
             .try_write()
