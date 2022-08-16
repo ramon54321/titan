@@ -116,6 +116,17 @@ struct Person {
 }
 ```
 
+### Structure
+
+Due to the need for proc-macros, the tests and examples are extracted into their own crates with dependencies similar to what the library consumer would have. Tests can be run with:
+
+```bash
+cd titan/tests
+cargo test
+```
+
+Examples are available in the `titan/example` crate. 
+
 ### Development
 
 - [x] Manual Registation of Components and Archetypes
