@@ -1,5 +1,5 @@
 <div align="center">
-  <span><img src="./docs/Titan.svg" width="100"></span>
+  <span><img src="./docs/Titan.svg" width="50%"></span>
 </div>
 
 ## Titan: Minimal, Explicit and Simplistic ECS in Rust
